@@ -3,7 +3,11 @@ Collection of custom scripts, utils and weapons i have introduced in Worms Armag
 ## Requirements
 
 - Worms Armageddon version 3.6.31.0 with WormKit installed.
-- Rest of requirements will be placed on require folder.
+- WormKit DLLs that allow the game's interface to show up:
+- wkFrontendFix.DLL
+- wkAntiLag.DLL
+- wkWndMode.DLL (Stopped most crashes after finishing games)
+- Optional ddraw.DLL that also makes the whole thing more stable.
 
 ## Usage
 
