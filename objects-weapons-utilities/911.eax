@@ -1,0 +1,286 @@
+require utils, utils_steps, particles:
+
+CShootDesc NineDesc;
+
+CWeapon* NineStrike;
+
+planeCrash:CMissile
+
+float planeTargetX;
+float planeTargetY;
+bool planeTargetSet;
+
+CFireDesc* planefdesc;
+
+void nineelS::FirstFrame()
+{ 
+ planefdesc = new CFireDesc;
+ planefdesc->OwnerTeam = 0;
+ smokeNum = 0;                  
+ smokeTimer = 50;
+ NineStrike = GetWeaponByName("9/11");
+ planeTargetSet = false;
+ FreeMe = false;
+ 
+ zero(&NineDesc);
+ NineDesc.AddX = 0;
+ NineDesc.AddY = 0;
+ NineDesc.X=0;   
+ NineDesc.Y=0; 
+ NineDesc.SpX=50; 
+ NineDesc.SpY=0; 
+ NineDesc.Worm=0; 
+ NineDesc.Team=0; 
+ NineDesc.Delay = 3000; 
+}
+
+void planeCrash::planeCrash(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+{                
+  float offsetPLANE;
+  isFalling = false;
+  adjustCooldown = 0;   
+  targetXP = planeTargetX;
+  targetYP = planeTargetY; 
+  OwnerTeam = sdata->Team;
+  if (GS->IsCavern == false && sdata->Y>targetYP) targetYP = PosY; 
+  super;  
+  ColMask = new CColMask(4,4,MakeCircleMask(4));
+  PlayLocalSound(52, 5, 1.0, 1.0); 
+};
+
+bool hitPL;
+
+void planeCrash::Draw()
+{}
+
+void planeCrash::TakeExplosionDamage(fixed x, fixed y, int dmg)
+{
+	if(dmg == 0)
+        {
+          return;
+	}    
+	float fdmg = dmg;
+	float dx = PosX - x;
+	float dy = PosY - y;
+	
+	float distsqr = dx*dx + dy*dy;
+	float fdmgsqr = fdmg*fdmg*4.0;
+	
+	fdmg = (1.0 - distsqr/fdmgsqr) * fdmg;
+	
+	if (fdmg>(35)) Collide(this,1);
+}
+
+void planeCrash::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{            
+    if(Type == M_EXPLOSION)
+    {
+         TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]);
+    }
+    if (Type == M_FRAME)
+    {     
+         super;              
+         if (FreeMe) Free(true);
+         if (hitPL == true && SpY>0 && SpY<100){ SpY = SpY*1.047;  } //idk how to modify GravityFactor
+         
+         if(PosY >= Env->Water && PosX<(GS->LevelSX+400) && PosX>(0-400))
+            {
+                ExplodeAt(PosX, PosY);
+                FreeMe = true; 
+            }          
+        float dumbDistance = abs(PosX - targetXP);
+        if (dumbDistance <= 20) 
+            {
+                offsetPLANE = 0.21;
+                GravityFactor = GravityFactor*1.2;      //If it overshoots
+                adjustCooldown = 30;
+                hitPL = true;
+            }  
+        // Anim  
+        if (planeFly_anim) {                                             
+            local sprite = WhiteplaneFly->Index;                    
+            WeapSpriteParams* Params = new WeapSpriteParams;
+            new WeapSprite(this, sprite, Params);       
+            planeFly_anim = false;  }  
+          
+        if (!isFalling)
+        {
+        float xDistanceP = abs(PosX - targetXP); 
+        if (xDistanceP > 2000) 
+        {
+              SpY = SpY * 0.39;
+        }        
+        else if (xDistanceP > 1900)
+        {  
+              SpY = SpY * 0.50;
+        }
+        else if (xDistanceP > 1600) 
+        {    
+              SpY = SpY * 0.70;
+        }
+        else if (xDistanceP > 1200)
+        {   
+              SpY = SpY * 0.80; 
+        }                        
+        else if (xDistanceP > 920)
+        {   
+              SpY = SpY * 1.05;     
+        }
+        else if (xDistanceP < 920)
+        {
+              isFalling = true;
+              offsetPLANE = 0;
+        }  
+        }    
+        
+        // HOMING BEHAVIOR
+        //Doing some math according to coordinates would be better but that's more math i have to do and i already have this so i'm not rethinking it :)
+        if (isFalling && adjustCooldown == 0)
+        {
+            float dirX = targetXP - PosX;
+            float dirY = targetYP - PosY;
+            float distanceToTarget = sqrt(dirX * dirX + dirY * dirY);
+            
+            if (distanceToTarget > 0)  // Avoid division by zero
+            {
+                dirX = dirX / distanceToTarget;
+                dirY = dirY / distanceToTarget;
+            }
+
+            float missileSpeed = 19;
+            float homingStrength = 0.25 - offsetPLANE;
+            
+            // 2. Calculate the ideal velocity (direction * speed)
+            float requiredSpX = dirX * missileSpeed;
+            float requiredSpY = dirY * missileSpeed;
+
+            // 3. Gently steer the current velocity towards the ideal velocity
+            SpX += (requiredSpX - SpX) * homingStrength;
+            SpY += (requiredSpY - SpY) * homingStrength;
+
+            adjustCooldown = 2;
+        }
+        else if (isFalling)
+        {
+            adjustCooldown--;
+        }      
+    } 
+    else super(sender, Type, MSize, MData);  
+} 
+  
+
+void planeCrash::ExplodeAt(fixed x,fixed y)
+{        
+            local fs = Root->GetObject(TI_FireStore, 0);
+            planefdesc->X = PosX;
+            planefdesc->Y = PosY - 1;
+            planefdesc->Count = 7;
+            planefdesc->UnkB = 1;
+            planefdesc->Duration = 1500;
+            planefdesc->UpPower = 55;
+            planefdesc->Damage = 9;
+            planefdesc->SpY = -3;
+            planefdesc->SpX = -3;
+            local fire = new CFire(fs, planefdesc, 0);
+            planefdesc->SpX = 3;
+            planefdesc->Y = PosY + 20;
+            fire = new CFire(fs, planefdesc, 0); 
+            planefdesc->SpX = 0;
+            planefdesc->SpY = -8;
+            planefdesc->Y = PosY - 3;
+            fire = new CFire(fs, planefdesc, 0); 
+            if (PosX<GS->LevelSX && PosX>0){
+            local smoker = new CSmoker(Root, x, y, false);
+            if (smoker!=NullObj)
+            {
+              smoker->turn = 0; 
+              smoker->life = 0;   
+            }
+            }
+            super(x,y);
+}
+
+override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
+{
+    if (Weap->CheckName("9/11") == true)
+    {     
+        NineDesc.AddX = Desc->AddX; 
+        NineDesc.AddY = Desc->AddY;                    
+        
+        // SET THE GLOBAL TARGET FOR THE PLANE
+        planeTargetX = Desc->AddX;
+        planeTargetY = Desc->AddY;
+        planeTargetSet = true;
+        
+        Desc->Y = -288.0;
+        
+        if (Desc->SpX >= 0.0)                            
+            Desc->X = -500.0;      // spawnpos left side
+        else          
+            Desc->X = GS->LevelSX + 500.0;  // spawnpos right side
+            //GG->WriteToChat( 3, ItoA(GS->LevelSY), false);
+        
+        if (Desc->SpX >= 0.0)
+            Desc->SpX = 40.0;   // hover right
+        else   
+            Desc->SpX = -40.0;  // hover left
+        
+        NineDesc.X = Desc->X;   
+        NineDesc.Y = Desc->Y; 
+        NineDesc.SpX = Desc->SpX; 
+        NineDesc.SpY = Desc->SpY; 
+        NineDesc.Worm = Desc->Worm; 
+        NineDesc.Team = Desc->Team;              
+        NineDesc.Delay = 3000;                   
+        hitPL = false;
+        
+        if (GS->IsCavern)
+        {
+         NineDesc.Y =  150;  
+           NineDesc.Y -= 50; 
+           NineDesc.SpY = 20;
+            if (Desc->SpX >= 0.0){
+            NineDesc.SpX = 0;
+            NineDesc.X = NineDesc.X + 400;   
+            }
+            else{
+            NineDesc.X = NineDesc.X - 400;
+            NineDesc.SpX = 0;
+            }
+        }
+        
+        //airplaneWEAP.launch.gravityFactor = 0.0;  //just 
+          
+        float xDistanceSp = abs(NineDesc.X - planeTargetX);    
+        if (xDistanceSp<700)   //Spawn further back and do a spin
+        {
+           NineDesc.Y -= 50; 
+           NineDesc.SpY = 20;
+            if (Desc->SpX >= 0.0){
+            NineDesc.SpX = -70;
+            NineDesc.X = NineDesc.X + 370;   
+            }
+            else{
+            NineDesc.X = NineDesc.X - 400;
+            NineDesc.SpX = 70;
+            }    
+           NineDesc.SpY = 0;
+           ShowMessage("Executing Tactical Maneuver");
+        }
+        
+        if (NineDesc.Team < 0) NineDesc.Team = 0;
+        ldata2 = airplaneWEAP.launch;
+        ldata2.gravityFactor = 100;
+        
+        if (GS->LevelSY > 4000)  //mmmfgh so huge
+        {
+         NineDesc.Y = planeTargetY - 1000;
+        }
+        
+        planeCrash* mis = new planeCrash(Root->GetObject(25, 0), &ldata2, &NineDesc);    //spawn missile
+    }
+    else 
+    {
+        super;
+    }
+} 
