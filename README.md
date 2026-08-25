@@ -14,3 +14,9 @@ Collection of custom scripts, utils and weapons i have introduced in Worms Armag
 - This is a repo that is meant to just show what i've done over the past months. Regardless of that, i will still try to include PXL updates, sometimes more often than the code itself.
 - Move all PXL files inside Worms\Libs
 - Enjoy =)
+
+## Misc
+
+- If you want to see interesting stuff, check utils_red, or the saw/bees, these are my favorite! flowers and random teleport are quite cool too
+- Attack helicopter is also nice
+
