@@ -24,13 +24,13 @@ Collection of custom scripts, utils and weapons i have introduced in Worms Armag
 
 #Contributions to other libs:
 
-#SPB:
+**SPB:**
 
 - Added support for sprite multiplexing (sprite sheets).
 - Added support for weapons having firing sprites.
 - Added support for weapons to change their sprite at any given moment.
 
-#Others:
+**Others:**
 
 - Particles.PXL Support for sprite sheets and animations.
 - Fixed Armor Vest (mostly).
