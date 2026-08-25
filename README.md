@@ -2,13 +2,13 @@ Collection of custom scripts, utils and weapons i have introduced in Worms Armag
 
 ## Requirements
 
-- Worms Armageddon version 3.6.31.0 with WormKit installed.
+- Worms Armageddon version **3.6.31.0** with WormKit installed.
 - WormKit DLLs that allow the game's interface to show up:
 - wkFrontendFix.DLL
 - wkAntiLag.DLL
 - wkWndMode.DLL (Stopped most crashes after finishing games)
 - Optional ddraw.DLL that also makes the whole thing more stable.
-- **All of these DLLs can be found on 0rang3's PX build.**
+**All of these DLLs can be found on 0rang3's PX build.**
 
 ## Usage
 
@@ -22,7 +22,7 @@ Collection of custom scripts, utils and weapons i have introduced in Worms Armag
 - Attack helicopter is also nice
 
 
-Contributions to other libs:
+#Contributions to other libs:
 
 #SPB:
 
@@ -36,7 +36,7 @@ Contributions to other libs:
 - Fixed Armor Vest (mostly).
 - Helped orange a bunch.
 - Fixed icy arrow freezing random stuff.
-- Added flag for magnets to ignore objects (obj->isMagnetit = false)
+- Added flag for magnets to ignore objects (obj->isMagnetic = false)
 - Fixed Portal Gun's 8 simultaneous FOR loops lol
 - Added useful stuff to utils.pxl
 - Fixed stone's erratic behavior regarding magnets and antiglitch
