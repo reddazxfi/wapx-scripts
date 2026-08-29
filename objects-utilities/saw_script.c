@@ -28,13 +28,7 @@ void saw_script::FirstFrame()
 
 void saw_script::InitGraphic()
 {
-   sawImg = LoadSprite(GetAttachment("sawsheet.png"),9,0);   
-}
-
-void CSaw::LookAtMe(fixed x,fixed y,int priority)
-{
- if (priority != 2) priority = 101;
- super;
+   sawImg = LoadSprite(GetAttachment("sawsheet.png"),11,0);   
 }
 
 CSaw : CMine;
@@ -60,6 +54,7 @@ CSaw::CSaw(CObject* Parent, CShootDesc* Desc, float sScale)
     SetLayerOverride(LAYER_OILDRUM);
     
     OwnerTeam = Desc->Team;       
+    OwnerColor = GetTeamColor(Desc->Team);
     SAWTEAM = -1;
     
     OnTurnHitLimit = 88; //Anti loop
@@ -73,11 +68,13 @@ CSaw::CSaw(CObject* Parent, CShootDesc* Desc, float sScale)
     stopRotation = false;
     
     SawOut = 0;
-    SawOutBlood = subSprIndex(8, 1); SawOutBlood2 = subSprIndex(8, 2); 
-    SawIn = subSprIndex(8, 3); SawInBlood = subSprIndex(8, 4); 
+    SawOutBlood = subSprIndex(10, 1); SawOutBlood2 = subSprIndex(10, 2); 
+    SawIn = subSprIndex(10, 3); SawInBlood = subSprIndex(10, 4); 
     
-    EleIn = 1;  EleOut = subSprIndex(8, 5); 
-    EleOutDmg = subSprIndex(8, 6); EleOutDmg2 = subSprIndex(8, 7);
+    EleIn = subSprIndex(10, 8);  EleOut = subSprIndex(10, 5); 
+    EleOutDmg = subSprIndex(10, 6); EleOutDmg2 = subSprIndex(10, 7);
+    
+    Outline = subSprIndex(10,9); OutlineDmg = 1.0;
     
     eleFuel = 30; //30 Worm hits.
     
@@ -201,12 +198,6 @@ void CSaw::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
  }
 }
 
-void CSaw::ShockWave()
-{
-     local radius = SawCollisionUnit * 0.75;
-
-}
-
 void CSaw::Zap()
 {
     supercharged = true;
@@ -246,9 +237,9 @@ void CSaw::Zap()
 
 void CSaw::UnZap()
 {    
-    SawOut = 0;  //Reset sprites.
-    SawOutBlood = subSprIndex(8, 1); SawOutBlood2 = subSprIndex(8, 2); 
-    SawIn = subSprIndex(8, 3); SawInBlood = subSprIndex(8, 4); 
+    SawOut = 0.0;  //Reset sprites.
+    SawOutBlood = subSprIndex(10, 1); SawOutBlood2 = subSprIndex(10, 2); 
+    SawIn = subSprIndex(10, 3); SawInBlood = subSprIndex(10, 4); 
     
     //SawDamagedSpr  
 
@@ -260,12 +251,6 @@ void CSaw::UnZap()
 }
 
 ////////////////////////////////////////////CODE////////////////////////////////////////////
-void CSaw::Free(bool FreeMem)
-{
- if (FreeMem && SawCheckMask!=NullObj) delete SawCheckMask; //free heap
- 
- super;
-}
 
 void CSaw::TakeExplosionDamage(fixed x, fixed y, int dmg)
 {
@@ -288,262 +273,155 @@ void CSaw::TakeExplosionDamage(fixed x, fixed y, int dmg)
 
 void CSaw::processSawCollission()
 {
-        if (OnTurnHits > OnTurnHitLimit) return; //Hit too much
+        if (OnTurnHits > OnTurnHitLimit) return;
+
         for(int i = 0; i < Env->Objs.Count; i += 1)
 	{
 		obj = CGObject(Env->Objs.Objs[i]);
-		
+
 		if(obj == this) continue;
 		if(obj == NullObj) continue;
-		if(obj is CPlatform) continue;  
+		if(obj is CPlatform) continue;
 		if(obj->IsStatic == true) continue;
-		if(obj->IsMaterial == false) continue;  
-                if(obj->ClType == OC_Landscape) continue; 
-                if(obj->ClType == OC_Cross) continue;    
-                if(obj->ClType == OC_Platform) continue; 
-                //if(obj is PxDeadWorm == true) continue;
-                
+		if(obj->IsMaterial == false) continue;
+                if(obj->ClType == OC_Landscape) continue;
+                if(obj->ClType == OC_Cross) continue;      
+                if(obj->ClType == OC_OldWorm) continue;
+
                	if(SawCheckMask->Check(PosX, PosY, obj->ColMask, obj->PosX, obj->PosY))
 		{
-			if (obj->ClType == ClType) continue;
-			
-			if (obj is CGObject == false) continue; //Had it happen
-			
-			local hitPX = obj->PosX;  
+			if (obj is CSaw) continue;
+			if (obj is CGObject == false) continue;  //Had it happen
+
+			local hitPX = obj->PosX;
                         local hitPY = obj->PosY;
-		   
-			if(obj->ClType == OC_Worm) //Look for players
+
+			if (obj is CWorm == true)
 			{
                                 local worm = CWorm(obj);
                                 if (SAWTEAM > -1 && GetTeamColor(worm->WormTeam) == SAWTEAM)
-                                {                            
+                                {
                                         stopRotation = true;
 				}
-                                else if((SAWTEAM > -1 && GetTeamColor(worm->WormTeam) != SAWTEAM || SAWTEAM < 0) && worm->hitFrame >= 7 && worm->timesSliced < 26)  //Target worm
-				{        //Target VALID worm
+                                else if((SAWTEAM > -1 && GetTeamColor(worm->WormTeam) != SAWTEAM || SAWTEAM < 0) && worm->hitFrame >= 7 && worm->timesSliced < 26)
+				{
 					 if(worm->ObjState!=WS_DEAD ||
-					 worm->ObjState!=WS_DEATH   ||   
+					 worm->ObjState!=WS_DEATH   ||
 					 worm->ObjState!=WS_SINKING ||
-					 worm->ObjState!=WS_SUICIDEBOMBER )                                                     
+					 worm->ObjState!=WS_SUICIDEBOMBER )
 					 {
                                                  LookAtMe(PosX, PosY, 2);
-                                        	 CSawCollission(worm)  ;
-				        	 worm->hitFrame = 0;   //Set Cooldown
-				                  
+                                        	 CSawCollission(worm);
+				        	 worm->hitFrame = 0;
+
                                                  int particleNumber = 119; //Blood
-                                         
-                                                 if (worm->ObjState==WS_FROZEN || worm->ObjState == WS_DRILLING) 
+
+                                                 if (worm->ObjState==WS_FROZEN || worm->ObjState == WS_DRILLING)
                                                  {
                                          	 	 ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX,hitPY) * soundMultiplier);
-				         	         particleNumber = 81;    //Spark
+				         	         particleNumber = 81; //Spark
 				                 }
-	                                 	 local p = new PxParticle(particleNumber, hitPX, hitPY);   
+	                                 	 local p = new PxParticle(particleNumber, hitPX, hitPY);
                                          	 p->SetLifeTime(12);
                                          	 p->SetVelocity(0,0);
                                          	 p->SetStartAlpha(255);
 	                                 	 p->SetEndAlpha(255);
                                          }
 				}
-				if (obj is CWorm == true)
-                                         continue; 
-			} 
-		        if(obj->ClType == OC_Crate && Root->IsTimerActive() == true)
-			{            
-			        local crate = CCrate(obj);
-			        crate->sawhitlimit+=1;
-			        if (crate->sawhitlimit > 5) continue;
-			        
-                                ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX,hitPY) * soundMultiplier));
-			        OnTurnHits++;         
-                                obj->Collide(this, 1);        
-			        SendMessage(obj, 5);
-			        if (obj!=NullObj)
-                                ApplySawKnockback(obj, PosX, PosY, 0.77);    
-				         continue;
+                                continue;
 			}
-			else if (obj->ClType == OC_Crate && Root->IsTimerActive() == false)
-			{                
+
+		        if (obj is CCrate == true)
+			{
 			        local crate = CCrate(obj);
 			        crate->sawhitlimit+=1;
 			        if (crate->sawhitlimit > 5) continue;
-                                ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX,hitPY) * soundMultiplier));
-                                ApplySawKnockback(crate, PosX, PosY, 0.77);    //Dont explode outside turns.
-                                continue;    
-			} 
-			if(obj->ClType == OC_Mine)  //Target Objects
-			{               
-			        local amine = CMine(obj);
-			        if (amine == NullObj) return; //Something went wrong
-			        if (amine->sawhitlimit<20 && amine->hitFrame >= 5 )
+
+                                ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX,hitPY) * soundMultiplier);
+
+			        if (Root->IsTimerActive() == true)
 			        {
 			                OnTurnHits++;
-			                amine->sawhitlimit+=1;         
-                                        obj->Collide(this, 1);     
-                                        SendMessage(obj, 15); 
-                                        amine->hitFrame = 0;
-                                        ApplySawKnockback(obj, PosX, PosY, 0.85); //Use different function for objects.    
-                                        ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX, hitPY) * soundMultiplier));
+                                        obj->Collide(this, 1);
+			                SendMessage(obj, 5);
+			                if (obj!=NullObj)
+                                        ApplySawKnockback(obj, PosX, PosY, 0.77);
+                                }
+                                else  //Dont explode outside turns.
+                                {
+                                        ApplySawKnockback(crate, PosX, PosY, 0.77);
+                                }
+				continue;
+			}
+
+			if (obj is CMine == true || obj is CBee == true)
+			{
+			        local amine = CMine(obj);
+			        if (amine == NullObj) return;
+			        if (amine->sawhitlimit<20 && amine->hitFrame >= 5)
+			        {
+			                OnTurnHits++;
+			                amine->sawhitlimit = amine->sawhitlimit + 1;  
+                                        SendMessage(obj, 15);
+                                        if (amine!=NullObj)
+                                        {
+                                                ApplySawKnockback(obj, PosX, PosY, 0.85);
+                                                amine->hitFrame = 0;
+                                        }
+                                        ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX, hitPY) * soundMultiplier);
 				}
-				else continue;
 			//	if (#ELECTRIC_PLUGIN)
 			//	{
-			//	        amine->Supercharge();
+			//	        if (obj->ClType == OC_Mine) amine->Supercharge();
 			//	}
                                         //continue;
+				continue;
                         }
-			else if(obj is CMagnet == true)
-			{         
-                                if (#WEAPON_MAGNET)
-                                {
-                                local magnetobj = CMagnet(obj); 
-                                if (magnetobj->sawhitlimit > 10 || magnetobj->hitFrame != 5) 
-                                        continue; 
-                                magnetobj->Recharge();        
-                                
-                                magnetobj->sawhitlimit+=1;
-                                magnetobj->hitFrame = 0; 
-			        OnTurnHits++;        
-                                magnetobj->Collide(this, 1);
-			        SendMessage(magnetobj, 15);   
-                                ApplySawKnockback(magnetobj, PosX, PosY, 0.77);  
-                                
-                                ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX, hitPY) * soundMultiplier);
-                                }
-				        continue;
-			}
-			else if(obj is CBowlingBall == true)
-			{           
-			        OnTurnHits++;   
-			        local ballin = false;
-			        
-			        if (#WEAPON_BOWLINGBALL)
-			        {       
-                                        CBowlingBall *ball = CBowlingBall(obj); 
-                                        if (ball->sawhitlimit > 10 || ball->hitFrame != 5) 
-                                        continue;
-                                        ball->sawhitlimit+=1;
-                                        ball->hitFrame = 0;
-                                    
-                                        ball->Wake();
-                                        ballin = true;
-			                if (supercharged)
-			                {
-				                // Send bowling balls flying and charge them
-				                if (ball->ZapTurnsRemaining == 0) ball->Zap(0);
-                                                else ball->Zap(1);
-                                        }
-                                }    
-                                obj->Collide(this, 1);    
-			        SendMessage(obj, 20);   
-                                ApplySawKnockback(obj, PosX, PosY, 0.77);    
-			        ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX,hitPY) * soundMultiplier));
-			        
-			        if (ballin) return;
-				else        continue;
-			} 
-			else if((obj->Layer == LAYER_MINE || obj->Layer == LAYER_OILDRUM) && obj->ClType != ClType && obj->ClType != OC_OilDrum && obj->ClType != OC_Mine)
-			{          
-			        OnTurnHits++;  
-                        // Macros
-                
-		        if (obj==NullObj) return;
- 
-		if(#WEAPON_CUSTOMTURRET)
-		{
-			if(obj is CCustomTurret)
+
+			if (obj is COilDrum == true)
 			{
-				CCustomTurret *custur = CCustomTurret(obj);
-				custur->ammoCurrent = 0;
-			}
-		}
-		if(#LAMP_MISSILE)
-		{
-			if(obj is CLampMissile && supercharged)
-			{
-				CLampMissile *lamp = CLampMissile(obj);
-				if (lamp->hitFrame != 5 && lamp->sawhitlimit < 10)
-				{
-                                	lamp->Recharge();
-					lamp->hitFrame = -50;
-					lamp->sawhitlimit+=1;
-					continue;
-				}
-				else continue;
-			}
-		}
-		if(#WEAPON_FAN)
-		{
-			if(obj is PxFan)
-			{
-                                local fanobj = PxFan(obj);
-				if (fanobj->TurnsRemaining <= 0) { fanobj->Recharge(); return; }
-				else
-					{
-					fanobj->Health = 1;
-					if (supercharged) fanobj->TakeDamage(TazerObjectDamage, 0);
-					}
-			}
-		}                                      
-                                if (obj!=NullObj)
-                                {
-                                        obj->Collide(this, 1);            
-			                SendMessage(obj, 1);    
-			                if (obj!=NullObj)
-                                        ApplySawKnockback(obj, PosX, PosY, 0.77);  //Use different function for objects. 
-                                        ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX,hitPY) * soundMultiplier));
-                                }                
-				        continue;
-			}
-			else if(obj->ClType == OC_OilDrum)
-			{        
 			        local drum = COilDrum(obj);
 			        drum->sawhitlimit+=1;
-                                OnTurnHits++;          
-                                drum->Collide(this, 1);     
-			        SendMessage(obj, 20);  
+                                OnTurnHits++;
+			        SendMessage(obj, 20);
 			        if (drum!=NullObj)
-                                ApplySawKnockback(drum, PosX, PosY, 0.87);                            
-				         continue;
+                                ApplySawKnockback(drum, PosX, PosY, 0.87);
+				continue;
 			}
-			else if (obj is CMissile == true || obj->ClType == OC_Missile)
-			{             
-                                local mis = CMissile(obj);  
-			        if  (mis->sawhitlimit>20 && mis->hitFrame <5) continue;
-			        
-                                OnTurnHits++;   
-                                
-                                p->SetLifeTime(12);
-                                p->SetVelocity(0,0);
-                                p->SetStartAlpha(255);
-                                p->SetEndAlpha(255);     
-			        
+
+			if (obj is CMissile == true)
+			{
+                                local mis = CMissile(obj);
+			        if (mis->sawhitlimit>20 && mis->hitFrame <5) continue;
+
+                                OnTurnHits++;
+
                                 if (obj is CMeteoriteBullet)
-			        {                         
+			        {
                                         mis->sawhitlimit+=1;
                                         mis->hitFrame = 0;
 			                ApplyConstantSpeed(obj, 12.0);
 			                continue;
 			        }
-                                     
-                                if (mis==NullObj) return;
-                                
-                                local p = new PxParticle(81, hitPX, hitPY);   
-                                    
-                                mis->Collide(this, 1);  // make it explode if its zook or just bounce if its nade  
-                                if (mis != NullObj && mis->sawhitlimit<20 && mis->hitFrame >=5)  //NullObj check because Collide might trigger Free
-                                {                             
-			            if (mis == NullObj) return;  
-                                    ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX,hitPY) * soundMultiplier));
+
+                                local p = new PxParticle(81, hitPX, hitPY);
+                                p->SetLifeTime(12);
+                                p->SetVelocity(0,0);
+                                p->SetStartAlpha(255);
+                                p->SetEndAlpha(255);
+
+                                mis->Collide(this, 1);  // make it explode if its zook or just bounce if its nade 
+                                if (mis != NullObj && mis->sawhitlimit<20 && mis->hitFrame >=5) //NullObj check because Collide might trigger Free
+                                {
+                                    ApplySawKnockback(obj, PosX, PosY, 0.88);
+                                    ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX,hitPY) * soundMultiplier);
                                     mis->sawhitlimit+=1;
                                     mis->hitFrame = 0;
-                                    ApplySawKnockback(obj, PosX, PosY, 0.88);    
-				}   
-				else continue;
-                                         continue;
+				}
+                                continue;
 			}
 		}
-         }       	
-                
+         }
 }
 
 void CSaw::SendMessage(CGObject* obj, int dmg)
@@ -565,13 +443,50 @@ void CSaw::SendMessage(CGObject* obj, int dmg)
 	msg.params[6]	= 0;
 	
 	if (obj is CBee == true)  
-	msg.params[5]	= dmg+20;    
-	else if (obj is CCustomTurret == true)  
-	msg.params[5]	= dmg*6;
-				
-	obj->Message(this, M_GUNEXP, 1032, &msg);  
-            
+	{
+		msg.params[5]	= dmg+15;    
+	}
+        else if (obj is CCustomTurret == true)  
+	{
+		msg.params[5]	= dmg*6;  
+        }   
+	else if (obj is PxSentryGun == true)  
+	{
+		msg.params[5]	= dmg*4;
+	}
+	if (#WEAPON_BOWLINGBALL)
+	{
+		if (obj is CBowlingBall == true)
+		{
+                	CBowlingBall *ball = CBowlingBall(obj);
+
+                	ball->Wake();
+                	if (supercharged)
+                	{
+                        	if (ball->ZapTurnsRemaining == 0) ball->Zap(0);
+                        	else ball->Zap(1);
+                 	}
+		}
+	}
+	if (#WEAPON_MAGNET)
+	{
+		if (obj is CMagnet == true)
+		{
+	        	local magnetobj = CMagnet(obj);
+	        	magnetobj->Recharge();
+		}    
+	}
+	if(#WEAPON_CUSTOMTURRET)
+	{
+		if(obj is CCustomTurret == true)
+		{
+			CCustomTurret *custur = CCustomTurret(obj);
+			custur->ammoCurrent = 0;
+		}
+	}			
+	obj->Message(this, M_GUNEXP, 1032, &msg);             
 } 
+
 void CSaw::SendWormMessage(CWorm* worm, int dmg)
 {
         if (worm == NullObj) return;
@@ -804,37 +719,59 @@ void CSaw::Render()
 
 void CSaw::Draw()
 {
-    if(timesCollided <= 14)
-    AddSpriteEx(ZethPlane, PosX, PosY, SawIndex, SawIn, 0, sawScale); 
-    else if(timesCollided >= 14)    
-    AddSpriteEx(ZethPlane, PosX, PosY, SawIndex, SawInBlood, 0, sawScale);
+    local hasColorMod = false;
+    if(timesCollided <= 14)    {
+        AddSpriteEx(ZethPlane, PosX, PosY, SawIndex, SawIn, 0, sawScale);  
+    }
+    else if(timesCollided >= 14) {   
+        AddSpriteEx(ZethPlane, PosX, PosY, SawIndex, SawInBlood, 0, sawScale);
+    }
     
-    if(timesCollided < 7)
-    AddSpriteEx(ZethPlane + 0.2, PosX, PosY, SawIndex, SawOut, sawRotation, sawScale);
+    if(timesCollided < 7) {
+        AddSpriteEx(ZethPlane + 0.2, PosX, PosY, SawIndex, SawOut, sawRotation, sawScale);
+    }
     
-    if(timesCollided >= 7 && timesCollided < 14)
-    AddSpriteEx(ZethPlane + 0.2, PosX, PosY, SawIndex, SawOutBlood, sawRotation, sawScale);
+    if(timesCollided >= 7 && timesCollided < 14) {
+        AddSpriteEx(ZethPlane + 0.2, PosX, PosY, SawIndex, SawOutBlood, sawRotation, sawScale);
+    }
 
-    else if(timesCollided >= 14)
-    AddSpriteEx(ZethPlane + 0.2, PosX, PosY, SawIndex, SawOutBlood2, sawRotation, sawScale);    
+    else if(timesCollided >= 14) {
+        AddSpriteEx(ZethPlane + 0.2, PosX, PosY, SawIndex, SawOutBlood2, sawRotation, sawScale); 
+    } 
+    
+    local blendT = 14;
+    if (SAWTEAM == 5) blend = 8;
+    
+    if (timesCollided < 7 && SAWTEAM>=0) 
+    {  hasColorMod = true;   
+        SetColorMod(GetTeamColorRGB(SAWTEAM + 1), blendT); 
+        AddSpriteEx(ZethPlane + 0.3, PosX, PosY, SawIndex, Outline, sawRotation, sawScale);  
+    }  
+    else if (timesCollided >= 8 && SAWTEAM>=0) 
+    {  hasColorMod = true;
+        SetColorMod(GetTeamColorRGB(SAWTEAM + 1), blendT); 
+        AddSpriteEx(ZethPlane + 0.3, PosX, PosY, SawIndex, OutlineDmg, sawRotation, sawScale);  
+    } 
+    
+    if (hasColorMod) ClearColorMod();
 }
     
 ////////////////////////////////////////////////////////////////////////////
 
 override void CMissile::ExplodeAt(fixed x,fixed y)
 {
-    int counter = 0;
     if(weap->CheckName("Saw Grenade") || weap->CheckName("Place Saw"))
     {
         if(true)
         {
                 local w = GetCurrentWorm();
-
+        
                 CShootDesc SDesc;
                 zero(&SDesc);
 
                 SDesc.X = x;
                 SDesc.Y = y;
+                SDesc.Team = SAWTEAM;
                 SDesc.Delay = 11;
                 
                 GG->land->ApplyMask(4,SDesc.X,SDesc.Y);
@@ -848,7 +785,6 @@ override void CMissile::ExplodeAt(fixed x,fixed y)
   
                 local saw = new CSaw(Root->GetObject( 25, 0), &SDesc, 0.5);
                 saw->SAWTEAM = GetTeamColor(SAWTEAM);
-                
         }
     }
     super;
@@ -858,14 +794,14 @@ override void CMissile::ExplodeAt(fixed x,fixed y)
 ///////////////////// OVERRIDES //////////////////////
 ////////////////////           ///////////////////////
 //////////////////////////////////////////////////////
-override void CMissile::Collide(CGObject* Obj,int type)
-{
- if (Obj!=NullObj) if (Obj->ClType == OC_Landscape && (weap->CheckName("Saw Grenade") || weap->CheckName("Place Saw"))) ClankSound(PosX, PosY, CalculateSoundVolume(PosX,PosY));
- 
+/*override void CMissile::Collide(CGObject* Obj,int type)
+{     
  super;
-}
+ 
+ if (Obj!=NullObj) if (Obj->ClType == OC_Landscape && (weap->CheckName("Saw Grenade") || weap->CheckName("Place Saw"))) ClankSound(PosX, PosY, CalculateSoundVolume(PosX,PosY)); 
+} */
 
-override CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
+override void CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool Snap,int Unk)
 {  
  super; 
   
@@ -873,34 +809,21 @@ override CMine::CMine(CObject* Parent,CMineParams* Params,CShootDesc* SDesc,bool
  sawhitlimit = 0;
 } 
 
-override CCrate::CCrate(CObject* Parent,CCrateDesc* desc,EDropType type)
+override void CCrate::CCrate(CObject* Parent,CCrateDesc* desc,EDropType type)
 {  
  super; 
   
  sawhitlimit = 0;
 }
 
-override CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
-{
- super;
- SAWTEAM = sdata->Team;
- hitFrame = 5;
- sawhitlimit = 0;
-}  
 
-override COilDrum::COilDrum(CObject* Parent,fixed X,fixed Y,bool Snap)
+
+override void COilDrum::COilDrum(CObject* Parent,fixed X,fixed Y,bool Snap)
 {
  super;
  
  sawhitlimit = 0;
-}   
-
-override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
-{             
-  super;     
-  if (Type == M_FRAME && hitFrame<5) hitFrame++;
-  if (Type == M_PRETURNSTART) sawhitlimit = 0; 
-} 
+}    
 
 override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
 {
@@ -922,7 +845,7 @@ override void CCrate::Message(CObject* sender,EMType Type,int MSize,CMessageData
 } 
 
 //////////////// WORM ////////////////
-override CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
+override void CWorm::CWorm(CObject* Parent,int aTeam,int aIndex,CWormParams* params)
 {
    super; 
    sawhitlimit = 0;

@@ -27,9 +27,7 @@ override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc
   // Check the truth table before bothering me =)
   // gframe based missileIndex (clustlets, etc)
   misIndex = gframe + 1;  
-  // From string fucker
-  WeaponName = GetName();  
-  
+  // From string fucker  
   backup_weap = CWeapon(NullObj);
   
   homeTargX = 0.0;
@@ -43,20 +41,26 @@ override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc
   childIndex = 0;
   childRange = 0;
  
-  super;
+  super;  
+  
+  WeaponName = "Null";  
   
   ExpOnImpact = MissileExplodesOnImpact(&this->launchdata);
   CWeaponLaunch* ldata2 = new CWeaponLaunch; 
  
-  customExp = false;
+  customExplosion = false;
   expDmg = ldata->explosion.damage;
   expDestroyR = expDmg;
   expShouldDestroy = true;
   expPush = ldata->explosion.pushPower;
   expFlags = -1;
   expParticles = true;
-  expSound = true;
+  expSound = true;   
+  expSoundNum = 0;
   expTaze = false;
+  
+  isMisElectric = false;
+  nocrashss = 0;
   
   cusExpEff = false;
   expR = 0.0;  expRGB = RGB(255,255,255);
@@ -64,7 +68,11 @@ override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc
   expEllipse = true;
   expVanish = 1.0;
   expThicc = 2.0;
-  expNoise = 0.01;
+  expNoise = 0.01;         
+  
+ SAWTEAM = sdata->Team;
+ hitFrame = 5;
+ sawhitlimit = 0;
   
  if (weap == NullObj && gu_cweap != NullObj)
  {
@@ -73,7 +81,7 @@ override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc
    backup_weap = gu_cweap;
    gu_cweap = CWeapon(NullObj); 
  };    
-}      
+}     
 
 override void CWorm::FireFinal(CWeapon* Weap,CShootDesc* Desc)
 {
@@ -146,7 +154,7 @@ void homeToPlace(float PointX, float PointY, CGObject * sender, float missileSpe
                //Manage your cooldown in your own M_FRAME
 };
 
-void CMissile::HomeAfter(float homeX, float homeY, int frames, float speed, float arcsharpness, int homeAmount)
+void CMissile::HomeAfter(float homeX, float homeY, int frames, float speed, float arcsharpness, int homeAmount, int homeSound)
 {
      shouldHomeCustom = true;
      homeTargX = homeX;    
@@ -155,25 +163,66 @@ void CMissile::HomeAfter(float homeX, float homeY, int frames, float speed, floa
      homeMArc = arcsharpness;
      homeMSpeed = speed;
      if (homeAmount != 0) homeMAmount = gframe + homeAmount;
+     homeMSound = homeSound;
+}
+
+void CMissile::doEffectExp(fixed x, fixed y)
+{
+    if (cusExpEff){
+    // Scale duration UP with damage.
+    int scaledDuration = 10 + int(launchdata.explosion.damage * 0.125);
+    
+    outVanish = expVanish * 0.25;
+    
+    int r; int g; int b;   
+    stripRGB(expRGB, &r, &g, &b);
+    
+    expRadius = launchdata.explosion.damage * 0.80;
+    if (expR!=0.0)  { expRadius = expR; }
+    
+    CEffectManager* wowExplosion = createEffectExplosion(x, y, expThicc, launchdata.explosion.damage, expNoise, r, g, b, false, scaledDuration, expVanish, outVanish);
+        wowExplosion->numSegs = int(launchdata.explosion.damage * 0.40) + 5;
+        wowExplosion->shouldExplode = expCircle;
+        wowExplosion->shouldEllipse = expEllipse;  }
+        if (!customExplosion) return;
+        else if (customExplosion)  {  do_custom_explosion(this, expFlags, x, y, expDmg, expPush, expDestroyR, expShouldDestroy, expParticles,expSound, expTaze, expSoundNum); }
+}
+
+override void CMissile::DoExplosion(fixed x,fixed y,int PushPower,int Damage,int unkB,int Team)
+{   
+    if (!customExplosion) super;
+    if (cusExpEff || customExplosion)
+    {
+        doEffectExp(x,y);
+    }           
+} 
+
+void CMissile::ApplyExplosionEffect(float thickness, int radius, int Rgb, bool circle, bool ellipse, float vanish)
+{
+   cusExpEff = true; 
+   expR = radius; 
+   expRGB = Rgb; 
+   expCircle = circle; 
+   expEllipse = ellipse ;
+   expVanish = vanish;
 }
 
 void CMissile::ON_FRAME()
 {  
+ if (hitFrame<5) hitFrame++;
    if (gframe > homeMAmount) shouldHomeCustom = false;                                                                 
    if (shouldHomeCustom)
    {
+      if (HomeMCD == 3) PlayLocalSound(homeMSound, 1.0, 1.0, 1.0);
       if (HomeMCD <=0 && gframe < homeMAmount) 
       {
          homeToPlace(homeTargX, homeTargY,this,homeMSpeed,homeMArc); HomeMCD = defaultHomeCooldown;      //CMissile::ApplyClustletHome(float clickX,float clickY,int delay,float speed,float turnsharpness,float homeAmount)
       }
       else if (HomeMCD > 0 && gframe < homeMAmount) { HomeMCD--;  }
-   }
+   }  
 } 
 
-void CMine::ON_FRAME(){} 
-void CWorm::ON_FRAME(){}
-
-override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){ super; if (Type == M_FRAME) ON_FRAME(); } override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){ super;  if (Type == M_FRAME) ON_FRAME();} override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){  super; if (Type == M_FRAME) ON_FRAME();}
+override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){ super; if (Type == M_FRAME) {ON_FRAME();}}// override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){ super;  if (Type == M_FRAME) ON_FRAME();} override void CMine::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){  super; if (Type == M_FRAME) ON_FRAME();}
 
 string CWeapon::GetName()
 {   
@@ -192,6 +241,8 @@ string CMissile::GetName()
     { 
        return " "; 
     };
+    
+    if (WeaponName != "Null" || WeaponName != NullString) return WeaponName;
      
     return weap->GetName();
 };

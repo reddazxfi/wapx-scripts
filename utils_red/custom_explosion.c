@@ -1,9 +1,8 @@
 require utils, pxparticles;          
 
-//CUSTOM EXPLOSION ONLY
-void CMissile::applyCustomExplosionParams(int expFlags1, int expDmg1, int expPush1, int expDestroyR1, bool expShouldDestroy1, bool expParticles1, bool expSound1, bool expTaze1)
+void CMissile::applyCustomExplosionParams(int expFlags1, int expDmg1, int expPush1, int expDestroyR1, bool expShouldDestroy1, bool expParticles1, bool expSound1, bool expTaze1, int expSoundNum1)
 {
- customExp   = true;     //This flag is checked in CMissile::ExplodeAt and overrides the vanilla explosion with this
+ customExplosion   = true;
  expFlags    = expFlags1;
  expDmg      = expDmg1;
  expPush     = expPush1;
@@ -12,72 +11,18 @@ void CMissile::applyCustomExplosionParams(int expFlags1, int expDmg1, int expPus
  expParticles     = expParticles1;
  expSound         = expSound1;
  expTaze          = expTaze;
+ expSoundNum      = expSoundNum1;
 }
 
-//EFFECT ONLY
-void CMissile::ApplyExplosionEffect(float thickness, int radius, int Rgb, bool circle, bool ellipse, float vanish)
-{
-   cusExpEff = true;  //This flag is checked in CMissile::ExplodeAt and just spawns the ring effects
-   expR = radius; 
-   expRGB = Rgb; 
-   expCircle = circle; 
-   expEllipse = ellipse ;
-   expVanish = vanish;
-}
-
-//Only effect, method that spawns CEffectManager.
-CEffectManager* CMissile::doEffectExp(fixed x, fixed y)
-{
-    // Scale duration UP with damage.
-    int scaledDuration = 10 + int(launchdata.explosion.damage * 0.125);
-    
-    outVanish = expVanish * 0.25;
-    
-    int r; int g; int b;   
-    stripRGB(expRGB, &r, &g, &b);
-    
-    expRadius = launchdata.explosion.damage * 0.80;
-    if (expR!=0.0)  { expRadius = expR; };
-    
-    CEffectManager* wowExplosion = createEffectExplosion(x, y, expThicc, launchdata.explosion.damage, expNoise, r, g, b, false, scaledDuration, expVanish, outVanish);
-    if (wowExplosion != NullObj)
-    {
-        wowExplosion->numSegs = int(launchdata.explosion.damage * 0.40) + 5;
-        wowExplosion->shouldExplode = expCircle;
-        wowExplosion->shouldEllipse = expEllipse;
-    }
-    return wowExplosion;
-}
-
-override void CMissile::DoExplosion(fixed x,fixed y,int PushPower,int Damage,int unkB,int Team)
-{
-           if (cusExpEff && customExp)  //Both Modified Explosion and Effect.
-           {
-                        doEffectExp(x,y);
-                        do_custom_explosion(this, expFlags, x, y, expDmg, expPush, expDestroyR, expShouldDestroy, expParticles, expSound, expTaze);
-           }
-           else if (cusExpEff && !customExp)  //Effect but vanilla explosion/
-           {
-                        doEffectExp(x,y);
-                        super;      
-           }
-           else if (!cusExpEff && customExp)   // Modified Explosion without effect
-           {
-                        do_custom_explosion(this, expFlags, x, y, expDmg, expPush, expDestroyR, expShouldDestroy, expParticles, expSound, expTaze);
-           }
-           else
-           {                    
-                        super;            //Vanilla
-           }
-}
-
-//MAIN METHOD.
-int do_custom_explosion(CGObject * sender, int flags, float x, float y, int dmg, int pushPower, float destroyRadius, bool destroy, bool particles, bool defSound, bool taze)
+int do_custom_explosion(CGObject * sender, int flags, fixed x, fixed y, int dmg, int pushPower, fixed destroyRadius, bool destroy, bool particles, bool defSound, bool taze, int esound)
 {      
       if (defSound) 
       {
-            PlayGlobalSound(RandomInt(69,71), 5, 1.0, 1.0);
-      } 
+            Root->PlaySound(RandomInt(69,71), 5, 1.0, 1.0);
+      }
+      else   
+            Root->PlaySound(esound, 5, 1.0, 1.0);
+       
       ePosX = x;
       ePosY = y;
       local targetsHit = 0; 
@@ -93,7 +38,7 @@ int do_custom_explosion(CGObject * sender, int flags, float x, float y, int dmg,
             if (obj->ClType == OC_Cross) continue;
             if (obj is PxDeadWorm == true) continue;
             
-            if (obj != NullObj && ((flags & obj->Layer) == 0 || flags == -1))
+            if (obj != NullObj && ((flags & obj->MaskIndex) == 0 || flags == -1))
             {
                   float oPosX = float(obj->PosX);
                   float oPosY = float(obj->PosY);
@@ -170,7 +115,7 @@ int do_custom_explosion(CGObject * sender, int flags, float x, float y, int dmg,
       if (particles)
       {
         //Explosion Tier (0 to 3 max)
-        int tier = (dmg / 22) - 1; 
+        int tier = (dmg / 25) - 1; 
         if (tier > 3) tier = 3;
         if (tier < 0) tier = 0;
 
@@ -319,13 +264,13 @@ int do_custom_explosion(CGObject * sender, int flags, float x, float y, int dmg,
       }
 
       }
-      if (sender is CMissile == true || sender is CMine == true ||  sender is COilDrum == true)
+      if (sender is CExplosionManager == false && (sender is CMissile == true || sender is CMine == true ||  sender is COilDrum == true))
       {
             local mis = CMissile(sender); 
             mis->OnCustomExplosion(dmg, pushPower, targetsHit);   
       }
       return tier;
-} 
+}  
 
 void do_explosion_particles(float x, float y, int tier, bool defSound, bool kachow, bool circle, bool ellipse, bool smoke, bool flare, int r, int g, int b)
 {   
@@ -683,6 +628,10 @@ void CMine::OnCustomExplosion(int dmg, int pushPower, int nTargetsHit)
 void COilDrum::OnCustomExplosion(int dmg, int pushPower, int nTargetsHit)
 {}
 
+override void CMissile::OnCustomExplosion(int dmg, int pushPower, int nTargetsHit)
+{
+      //PlayLocalSound(95, 5, 1.0, 1.0);   //what a good example
+}
 /*
 override void CMissile::ExplodeAt(fixed x,fixed y)
 {                                                   // (sender, flags, x, y, dmg, pushPower, destroyRadius, destroy, false, false);
@@ -816,14 +765,6 @@ CFlare::CFlare(fixed x, fixed y, int sprite, int duration, float size)
     flareSpin    = 0.0;
     if (RandomInt(1,2) == 1) flareSpin = 0.16; else flareSpin = -0.16;
 }
-  
-void CFlare::ExplodeAt(fixed x, fixed y)
-{
-}
-
-void CFlare::DoExplosion(fixed x,fixed y,int PushPower,int Damage,int unkB,int Team)
-{
-}
 
 void CFlare::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
 {
@@ -832,7 +773,7 @@ void CFlare::Message(CObject* sender, EMType Type, int MSize, CMessageData* MDat
     if (Type == M_FRAME)
     {
         if (fdead) { Free(true); return; }
-        if (PosY > GS->LevelSY) PlayLocalSound(55,5.0,1.0,1.0); // this.PlaySound( SIndex, UnkB, UnkC, Pan)
+        if (PosY > GS->LevelSY){ PlayLocalSound(55,5.0,1.0,1.0); fdead = true;}// this.PlaySound( SIndex, UnkB, UnkC, Pan)
         fduration--;
         if (fduration <= 0)
         {

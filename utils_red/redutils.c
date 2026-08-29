@@ -1,10 +1,11 @@
 require utils, utils_steps;
+
 ////////////////////ACTUAL UTILS////////////////////
 void WriteToChat2(int findex, string part1, string part2, bool unknwn)
 {
    GG->WriteToChat(findex, StrCon(part1,part2), unknwn) ;
-};                  
-
+}; 
+ 
 void WriteToChat3(int findex, string part1, string part2,string part3, bool unknwn)
 {
    GG->WriteToChat(findex, StrCon3(part1,part2,part3), unknwn) ;
@@ -29,11 +30,11 @@ float WormAimSprIdx(float FireanglE)
 };
 
 float absfloat(float n)
-{                                                                                                                                   
+{
   if (n<0.0) n = -n;
   return n;
 };
-                                        // any method names that makes sense (like maxf) just crashes the game lol
+
 float maxfloat(float a, float b)       //if u need int just do int(maxfloat(a,b)) 
 {
     if (a > b) 
@@ -170,23 +171,24 @@ void PlayGlobalSound(int SIndex,int UnkB,fixed UnkC,fixed Pan)
      local playedSound = false;
      for (i = 0; i < Env->Objs.Count; i++)
      {
-          if (playedSound) return; //i think its more reliable than break; 
+          if (playedSound) break;
           local obj = CGObject(Env->Objs.Objs[i]);
           if (obj == NullObj) 
           {
                continue;
           }
-          else
+          if (obj is CGObject == true)
           {
                if (!playedSound)
                {
                     obj->PlaySound(SIndex, UnkB, UnkC, Pan);   
-                    i = Env->Objs.Count - 1; 
+                    i = Env->Objs.Count - 1; //Just in case, had break; crash the game in FOR loops.
                     playedSound = true;
                }
           } 
           continue;
-     } 
+     }
+    // Root->PlaySound(SIndex, UnkB, UnkC, Pan); 
 }
 
 float FireAngleToRadians(float FireAngleF, int TurnsidE) 
@@ -280,7 +282,7 @@ int ObjToCMask(CGObject *obj)
 };
 //One of the most useful things i have here                                      //if u got no colmask just make a temporal one and delete after     
 bool CheckSpawnPoint(float spawnX, float spawnY, float targetX, float targetY, CColMask* colmask, float radius, int flags, float* outX, float* outY, int radiusLimit)
-{//Explores a ring and advances by (radius n) amount each iteration
+{
     if (colmask == NullObj) return false;
 
     *outX = spawnX;
@@ -401,7 +403,6 @@ void ForceCollission(CGObject * sender, int flags, float x, float y, int force, 
        };
 };
 
-//Too predictable, will have an obvious tendency to whatever place has more air.
 bool TeleportToRandom(CGObject * sender, CColMask *colMask, int flags)
 {     
   if (sender == NullObj) return false;
@@ -483,9 +484,7 @@ CColMask * ColMask3s ;
 int CMASK_ALL;
 int CMASK_EVERYTHING;
 int CMASK_ALL_WORMS;
-
-int TI_CGObject;
-int NEW_OBJ;
+string NullString;
 
 void redutils::InitGraphic()
 {    
@@ -495,9 +494,9 @@ void redutils::Init()
 {
     CMASK_ALL = -1;            
     CMASK_EVERYTHING = -1;
-    CMASK_ALL_WORMS = 4 + 8 + 16 + 32 + 64 + 256 ;     
-    TI_CGObject = 25;
-    NEW_OBJ = 0;
+    CMASK_ALL_WORMS = 4 + 8 + 16 + 32 + 64 + 256 ;   
+    NullString = "Null";  
+    
     spawnCheckRes = new CTraceRes();  //Deleting and creating stuff mid frame is expensive, just let it be. Works well for several objs using same res at the same time (for now)
     CheckArcRes = new CTraceArcRes(); //  
 }; 

@@ -572,7 +572,6 @@ CTazerShot::CTazerShot(CObject *parent, COilDrum *drum)
 	SoundObj = tazerLoopSound->Play(1.0, 0.0, false);
 }
 
-
 require utils_steps;
 
 void COilDrum::Freeze()

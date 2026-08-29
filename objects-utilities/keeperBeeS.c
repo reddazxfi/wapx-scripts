@@ -1,4 +1,4 @@
-require utils, p_sprite_builder, utils_steps, utils_red, utils_r2;
+require utils, utils_red, p_sprite_builder, utils_steps, utils_red, utils_r2;
 
 bool stopBee;
 int abeeTeam;  //Failsafe bee team check
@@ -31,11 +31,17 @@ CColMask * beeCheckMask;
  
 void keeperBeeS::InitGraphic()
 {
-	CFile *f;  
+    CFile *f;  
+    f = GetAttachment("beespr.png");   beeBaseSprite = LoadSprite(f, 4, 0);    
 	
-	f = GetAttachment("beespr.png");   beeBaseSprite = LoadSprite(f, 4, 0);    
-	
-        beeCheckMask = new CColMask(13,13,MakeCircleMask(13));
+    beeCheckMask = new CColMask(13,13,MakeCircleMask(13));
+                                                                        
+    f = GetAttachment("bee_spb.png");                          
+    beebee_aiming = LoadSprite(f, 1, 0);                                   
+    f = GetAttachment("beemisspr.png");                           
+    beemisspr = LoadSprite(f, 2, 0);                                
+    f = GetAttachment("spb_homing_bee.png");
+    beelauncherspr = LoadSprite(f, 2, 0);
 } 
 
 CBee * createBee(fixed x, fixed y, int team, CWorm* owner, bool spawnedFromBarrel )
@@ -158,6 +164,8 @@ CBee::CBee(CObject *parent, CShootDesc *Sdesc, CWorm *launcher, int team)
  frameTally = 0;
  even = 0;    
  
+     supercharged = false;
+ 
  beehomeActive = false;  
  didBeeStart = false;      
  beeRot = 0.0;          
@@ -185,7 +193,7 @@ CBee::CBee(CObject *parent, CShootDesc *Sdesc, CWorm *launcher, int team)
  
  Dead = false;
  
- homingCD = 80;     
+ homingCD = 12;     
  homingCDRoam = 10;
  homingDuration = 0;  
  beeTarget = CWorm(NullObj);   
@@ -207,33 +215,30 @@ CBee::CBee(CObject *parent, CShootDesc *Sdesc, CWorm *launcher, int team)
  lookingAtFlower = 0;
  randomInterval = 40;
  
+ randDeathTimer = RandomInt(60,130);
+ 
  bonk = 0;
  
  softSpin = true; 
+ 
+ linkedEffect = CEffectManager(NullObj);
 }
 
 /////////////////////////////////--CODE--/////////////////////////////////
 
-void CBee::Collide(CGObject * Obj, int type)
+void CBee::Taze()
 {
- super;
- 
- bonk++;
-}
-
-void CBee::HolyShitTheresAFlowerYippieee()
-{
-    flowering = true;
-    if (#Flowers)
-    {
-        StartPointX = FlowerPosX[lookingAtFlower] ;    
-        StartPointY = FlowerPosY[lookingAtFlower] - 28.0 ;
-    }
+   supercharged = true;
+   linkedEffect = attachPulseEffect(this, 11.0, 90, 130, 190);
+   linkedEffect->SetBeamThickness(2.0);        
+   linkedEffect->SetBeamGlowThickness( 12.0);
+   linkedEffect->SetNoise(3.1);
+   linkedEffect->SetVanishSpeedClamped(0.65);   
+   linkedEffect->glow = true;
 }
 
 void CBee::beeDraw()
-{
-    
+{    
     float baseX = PosX;
     float baseY = PosY;
     int   bframe = animFrame;
@@ -246,6 +251,11 @@ void CBee::beeDraw()
     {
 	hascolormod = true;
 	SetColorMod(RGB(90, 90, 240), 6);
+    }  
+    else if (supercharged)
+    {
+     hascolormod = true;
+     SetColorMod(RGB(220,235,255),14);
     }
 
     if (!faceRight)
@@ -259,7 +269,7 @@ void CBee::beeDraw()
         renderFlags = 0;
         renderAngle = beeRot;
     }
-
+    
     AddSpriteEx(ZPlane + 0.03, baseX, baseY, renderFlags + beeSpriteBase, bframe, renderAngle, 0.93);
 
     if(hascolormod) ClearColorMod();
@@ -468,7 +478,7 @@ void CBee::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
     if  (timerInactiveFrames > 200) { stopMe = true; }
      
     if (Root->IsTimerActive() == true)
-    { timerInactiveFrames = 0; stopMe = false; GravityFactor = gravity;  }
+    { timerInactiveFrames = 0; stopMe = false; } //GravityFactor = gravity;  }
     
     if (spawnFrames < 100) spawnFrames++;
     
@@ -478,13 +488,13 @@ void CBee::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
     {   
        FuckingDie();	     
     }
-    if (deadframes > 110)  //Funny effect using a bug, bee has a heart attack, falls and then explodes.
+    if (deadframes > randDeathTimer)  //Funny effect using a bug, bee has a heart attack, falls and then explodes.
        FuckingDie();
     
     if (OwnerWorm == NullObj)
      if (OwnerTeam>0 && OwnerTeam < 8)  //If team is valid but ownerworm isn't
-       if (GetCurrentWorm()!=NullObj)
-         if (GetCurrentWorm()->WormTeam == OwnerTeam) OwnerWorm = GetCurrentWorm();
+       if (GetCurrentWorm()!=NullObj) {
+         if (GetCurrentWorm()->WormTeam == OwnerTeam) OwnerWorm = GetCurrentWorm(); OwnerColor = GetTeamColor(OwnerTeam); }
     
     if (!Dead && !FreeMe && !isSinking()) animFrame += 0.001 * 4.0 * 50.0;      //Animation frame * Frame Amount * Frame Speed
     if (animFrame>1.0) animFrame = 0.0;    
@@ -503,11 +513,41 @@ void CBee::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
 } 
 
 void CBee::FuckingDie()
-{
-        DoExplosion(PosX,PosY,50,50,30,OwnerTeam);
+{       
+//int do_custom_explosion(CGObject * sender, int flags, float x, float y, int dmg, int pushPower, float destroyRadius, bool destroy, bool particles, bool defSound, bool taze)
+        if (supercharged)
+        {
+            local i = do_custom_explosion(this, -1, PosX, PosY, 55, 120, 40, true, false, true, supercharged, 0); 
+            drawKachaw(PosX, PosY);
+            local eff = createElectricExplosion(PosX,PosY,38);  
+            eff->SetVanishSpeedClamped(0.85);
+            eff->freeAfter = 20;
+            eff->shouldEllipse = true;
+        }
+        else 
+        {
+            local i = do_custom_explosion(this, -1, PosX, PosY, 40, 80, 30, true, false, true, supercharged, 0);      
+            drawKachaw(PosX, PosY);
+            local eff = createEffectExplosion (PosX, PosY, 5.0, 40.0, 0.001, 255, 251, 0, false, 20, 0.8, 0.8);  
+            eff->SetVanishSpeedClamped(0.80);
+            eff->freeAfter = 18;
+            eff->shouldEllipse = true;
+        }
+        
+        
         //Free(true);   
         FreeMe = true;    
         Dead = true;
+}
+
+void CBee::HolyShitTheresAFlowerYippieee()
+{
+    flowering = true;
+    if (#Flowers)
+    {
+        StartPointX = FlowerPosX[lookingAtFlower] ;    
+        StartPointY = FlowerPosY[lookingAtFlower] - 28.0 ;
+    }
 }
 
 bool CBee::IsThereADeadWormRightNOWOutThere()
@@ -552,7 +592,7 @@ void CBee::doSpin()
 {
         cancelRotation = true;
         stopMe = true;
-        beeRot = beeRot + 0.135; 
+        beeRot = beeRot + 0.165; 
         spinN = spinN +  1;
         beeTarget = CWorm(NullObj);     
         GravityFactor = 0;
@@ -579,7 +619,8 @@ void CBee::cancelSpin()
 }
 
 void CBee::HardReset()
-{
+{                         
+        cancelRotation = false;
         stopMe=false;
         stopBee = false;
         homingCD = 5;
@@ -593,10 +634,10 @@ void CBee::HardReset()
                 beeTarget = CWorm(NullObj);
                 homingCD = 5;
                 homingDuration = 0;
-                lookoutCooldown = 160;
+                lookoutCooldown = 40;
         } 
-        delayTally = 0;
-        homingDuration = 0;
+        //delayTally = 0;
+        //homingDuration = 0;
       
         cancelSpin();
 }
@@ -605,7 +646,7 @@ void CBee::RoamAround()
 {
         if (#Flowers)
         {
-                lookingAtFlower = CheckFlowerProximity(this, 200);
+                lookingAtFlower = CheckFlowerProximity(this, 140);
                 if  (lookingAtFlower!=98 && FlowerData[lookingAtFlower] != 0 )
                 {
                         HolyShitTheresAFlowerYippieee();
@@ -615,41 +656,34 @@ void CBee::RoamAround()
                         lookingAtFlower = -1;
                         flowering = false;
                 }
-        }
-        beeRoam();     
-        if (flowering)
+        }  
+        beeRoam();
+        if 	(flowering)	
         {              
                 if (#Flowers)
                 {
                         if (gframe % randomInterval == 0)                                              
                         {   
-                                if (IsThereLandThere(FlowerPosX[lookingAtFlower], FlowerPosY[lookingAtFlower] - 33.0, false) == false)
+                                if (IsThereLandThere(FlowerPosX[lookingAtFlower], FlowerPosY[lookingAtFlower] - 30.0, false) == false)
                                 {           
                                         didBeeStart = true;
                                         ArrivePointX = FlowerPosX[lookingAtFlower];   
                                         ArrivePointY = FlowerPosY[lookingAtFlower] - 30.0;
                                 }
-                                else 
-                                {
-                                     didBeeStart = false;
-                                     beeRoam(); 
-                                }
                         }
                 }
-        }  
+        }   
         if (gframe % 140 == 0) randomInterval = RandomInt(60,120);
         DetermineRotation();
         HomeToPlace(ArrivePointX, ArrivePointY);    //Random roam code
-        GravityFactor = gravity; 
-        
-        
+        GravityFactor = gravity;         
 }
 
 void CBee::ChaseSomeDude()
 {                 
-        flowering = false;
-        HomeToTarget(beeTarget); 
+        flowering = false;    
         beehomeActive = true;    
+        HomeToTarget(beeTarget); 
         homingCD = 2; // Cooldown before the next minor adjustment.
         homingDuration++;  
 }
@@ -698,25 +732,25 @@ void CBee::BeeThink()
     
     if (spin && spinN == 0)
     {   
-       if(spinframeLimit!=30) spinframeLimit = RandomInt(37,53);   //frame limit is 30 for hp = 0
-       cancelMovement();
+        if(spinframeLimit!=30) spinframeLimit = RandomInt(37,53);   //frame limit is 30 for hp = 0
+        cancelMovement();
     }
     if (spin == true)
     {
-       doSpin(); 
+        doSpin(); 
     }   
     if (softSpin && spinN == 0)
     {   
-       GravityFactor = 0;
+        GravityFactor = 0;
     }
     if (softSpin)
     {
-       doSoftSpin();      
+        doSoftSpin();      
     }    
         
     if (spinN >= spinframeLimit)
     {    
-       cancelSpin();
+        cancelSpin();
     }
     
         frameTally++;
@@ -727,21 +761,21 @@ void CBee::BeeThink()
     { cancelMovement(); } //Freeze   
     if ((frameTally % 25) == 0) //Periodic check
     {
-         local itadwrnot = IsThereADeadWormRightNOWOutThere(); 
+        local itadwrnot = IsThereADeadWormRightNOWOutThere(); 
      
-         if (!itadwrnot && Root->IsTimerActive() == true) 
-         {
-             stopBee = false;
-             stopMe = false;    
-             if (didBeeStart && absfloat(SpX + SpY) < 2.4) didBeeStart = false;
-         }
+        if (!itadwrnot && Root->IsTimerActive() == true) 
+        {
+            stopBee = false;
+            stopMe = false;    
+            //if (didBeeStart && absfloat(SpX + SpY) < 2.4) didBeeStart = false;
+        }
     }
         
     if (stopBee) stopMe=true;                       
     
-    if (frameTally > 3000) frameTally = 0;  //Avoid integer overflow is match is 10^18 seconds long
+    if (frameTally > 3000) frameTally = 0;  //Avoid integer overflow if match is 10^18 seconds long
     
-    if (delayTally > 150) delayTally = 0;
+    if (delayTally > 180) delayTally = 0;
         
     if (delayTally >= 149 && Root->IsTimerActive() == true)  //hard reset because i did something wrong and cant bother to look into it (i did the bee months ago)
     {                                                                                   
@@ -802,14 +836,22 @@ void CBee::BeeThink()
         
         if ( distToSpawn > 420.0 ) 
         {
-           spin=true;
-           lookoutCooldown = 250;
+             spin=true;
+             lookoutCooldown = 150;
            
-           RoamAround();    
-           RoamAround();
+             RoamAround();    
            
-           WhereTheFuckAmI += 50;
-           return;
+             WhereTheFuckAmI += 50;
+             return;
+        }
+        if (distToTarg > 310.0) 
+        {
+             beeTarget = CWorm(NullObj);
+             beehomeActive = false;
+             homingDuration = 0;
+             lookoutCooldown = 100;     
+             spin = true;
+             return;
         }
         
         if (distToTarg < 26.0 && homingDuration>12) //Ideally dist is (Barrel Height)/2+1 + (Worm Height/2) +1 , but since i know how tall bee is, this works fine.
@@ -822,20 +864,20 @@ void CBee::BeeThink()
         }
         if (homingDuration>160)  //AntiStall
         {
-              beehomeActive = false;   
-              homingDuration = 0;
-              lookoutCooldown = 200;
-              homingCD = 10;   
-              WhereTheFuckAmI += 50;
-              spin = true;
-              return;
+             beehomeActive = false;   
+             homingDuration = 0;
+             lookoutCooldown = 200;
+             homingCD = 10;   
+             WhereTheFuckAmI += 50;
+             spin = true;
+             return;
         }  
         
         //Target
         homingCD--;
         if (homingCD <= 0)
         {
-              ChaseSomeDude();   
+             ChaseSomeDude();   
         }
     }
     
@@ -856,8 +898,8 @@ void CBee::CalculatePlace(int multiplier, int * outx, int * outy)
    
    if (flowering)
    {
-      findDirX = RandomInt(-26 , 26);  
-      findDirY = RandomInt(-33 , 33);   
+      findDirX = RandomInt(-33 , 33);  
+      findDirY = RandomInt(-46 , 46);   
    }
    
    roamPY = circleY - findDirY * multiplier;    
@@ -929,7 +971,7 @@ void CBee::HomeToTarget(CWorm* targttt)
 {             
 	if (Dead || stopMe) return;    
 	
-        if (isSinking() == true) { didBeeStart = false; homingCD = 210; return;  }
+        if (isSinking() == true) { didBeeStart = false; homingCD = 30; return;  }
         
                 if (this == NullObj) return;
                 if (targttt == NullObj) return;           
@@ -950,8 +992,11 @@ void CBee::HomeToTarget(CWorm* targttt)
                     dirX = dirX / distanceToTarget;
                     dirY = dirY / distanceToTarget;
                   }
-                  float missileSpeed = RandomFloat(4.910, 9.99);   // How fast the missile tries to fly.
+                  
+                  float missileSpeed = RandomFloat(4.910, 8.99);   // How fast the missile tries to fly.
                   float homingStrength = RandomFloat(0.29, 0.349); // How sharply it can turn (0.0 to 1.0)
+                  
+                  if (supercharged) missileSpeed = missileSpeed * 1.5;
 
                   // 4. Calculate the ideal velocity (direction * speed).
                   float requiredSpX = dirX * missileSpeed;
@@ -1091,7 +1136,7 @@ override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData*
      }
 }
 
-override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
+override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
 {
  super;
  if (Type==M_PRETURNSTART && stopBee) stopBee = false;
@@ -1106,5 +1151,149 @@ override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
       createBee(Desc->X,Desc->Y,Desc->Team, this, false);
       return;
     }
+    super;
+}
+
+CSprite* beebee_aiming;                                                      
+CSprite* beemisspr;                                                
+CSprite* beelauncherspr;
+                                                                            
+                                                                                 
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) { 
+ super;                                                                          
+  if (Type == M_FRAME) {                                                         
+    if (gframe == 2) {                                                           
+     local weapName; local sprite;
+
+
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Keeper Bee";                                             
+     sprite = beebee_aiming->Index;                                   
+     Params->hand_radius = -14.5;                                                 
+     Params->animate = false;
+     Params->hand_rotation = -0.0;                                             
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;     
+     Params->weap_rotation = 0.5;
+     Params->weap_radius = -12.5;
+     Params->draw_hand = false;
+     Params->hand_type = 1;     
+     Params->hand_scale = 1.3;  
+     Params->FSprite =  0;                                           
+
+                                                
+     local WA = new WormSprite(weapName, sprite, Params);              
+    }                                                                           
+  }                                                                             
+}
+
+//---------------------------------BEE LAUNCHER------------------------------//
+
+override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData) {
+ super;
+  if (Type == M_FRAME) {
+    if (gframe == 2) {
+     local weapName; local sprite;
+     CWormAnimParams* Params = new CWormAnimParams;
+     weapName = "Homing Keeper Bee";
+     sprite = beelauncherspr->Index;
+     Params->draw_hand = false;
+     Params->hand_radius = 0.0;
+     Params->hand_rotation = 0.0;
+     Params->hand_radial_rotation = 0.0;
+     Params->weap_radial_rotation = 0.0;
+     Params->weap_rotation = 1.0;
+     Params->weap_radius = 3.5;
+     Params->animate = true;
+     Params->anim_speed = 1.80;
+     local WA = new WormSprite(weapName, sprite, Params);
+    }
+  }
+}
+
+override void CMissile::CMissile(CObject* parent, CWeaponLaunch* ldata, CShootDesc* sdata)
+{
+    isBeeMissile = globalBeeMissile;   // off by default, opted in after spawn in FireFinal
+    globalBeeMissile = false;
+    beeMOwner    = GetCurrentWorm();
+    if (beeMOwner != NullObj)
+    {
+    beeMTeam     = beeMOwner->WormTeam;
+    }
+    if (isBeeMissile && (sdata->X != PosX || sdata->Y != PosY))
+	{PosX = sdata->X; PosY = sdata->Y; }
+    beeMFrame    = 0.0;
+    beeMRot      = 0.0;
+    beeMFaceDir  = 1;
+    FreeMe = false;
+
+    super;
+}
+
+override void CMissile::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+    super;
+
+//    if (!isBeeMissile) return;
+
+    if (Type == M_FRAME)
+    if (isBeeMissile)
+    {
+        if (FreeMe){ Free(true);  }
+        beeMFrame += 1.0;
+        if (beeMFrame >= 3.0) beeMFrame = 0.0;   // 3-frame cycle, double speed vs the ground bee
+
+        // Same rotation formula WeapSprite::CalculateAngle uses, just inlined here
+        local spd = sqrt(SpX*SpX + SpY*SpY);
+        if (spd > 0.05)
+        {
+            beeMRot = -atan2(SpX, SpY) - MATH_PI;
+        }
+
+        if (SpX > 0.0) beeMFaceDir = 1;
+        else beeMFaceDir = 0;
+    }
+
+    if (Type == M_DRAWQUEUE)
+    if (isBeeMissile)
+    {
+        local spr = beemisspr->Index;
+        if (beeMFaceDir == 0) spr = spr + 262144;
+
+        AddSpriteEx(10.03, PosX, PosY, spr, beeMFrame, beeMRot, 0.93);
+    }
+}
+
+override void CMissile::Free(bool FreeMem)
+{
+    if (isBeeMissile && FreeMem)
+    {
+		local spawnTeam = beeMTeam;
+        local wrm = beeMOwner;
+        if (wrm != NullObj) { spawnTeam = wrm->WormTeam; abeeTeam = wrm->WormTeam; }
+        else abeeTeam = spawnTeam;
+        
+        float safeX = PosX; float safeY = PosY;
+        local spawnOK = CheckSpawnPoint(PosX, PosY, PosX, PosY, beeCheckMask, 3, CMASK_TERRAIN, &safeX, &safeY, 100);  
+        createBee(safeX, safeY, spawnTeam, wrm, false);   
+    super;
+    }
+    else
+    super;
+}
+
+bool globalBeeMissile; 
+
+override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
+{
+    if (Weap->CheckName("Homing Keeper Bee"))
+    {
+        globalBeeMissile = true;
+        float spawnX = Desc->X; float spawnY = Desc->Y;
+        local spawnOK = CheckSpawnPoint(PosX, PosY, PosX, PosY, beeCheckMask, 3, -1, &spawnX, &spawnY, 100);  
+        Desc->X = spawnX;   Desc->Y = spawnY;
+        super;
+    }
+    else
     super;
 }

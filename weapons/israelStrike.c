@@ -21,15 +21,15 @@ override void CWorm::FireFinal(CWeapon* Weap, CShootDesc* Desc)
    if (Desc->SpX > 0) Directn = 1;
    else Directn = -1;                                      
    PlayLocalSound(52, 5, 1.0, 1.0);
-   Weap->launch.anim.spriteIndex = 1500;
-   local strike = new Jewish(Root->GetObject(25, 0), Desc->AddX, Desc->AddY, Directn, &Weap->launch); 
+   Weap->launch.anim.spriteIndex = 0;
+   local strike = new Jewish(Root->GetObject(25, 0), Desc->AddX, Desc->AddY, Directn); 
  }
   else super;
 }
 
 Jewish : CMine;
 
-Jewish::Jewish(CObject* Parent, fixed X, fixed Y, int dir, CWeaponLaunch* lnchdt)
+Jewish::Jewish(CObject* Parent, fixed X, fixed Y, int dir)
 {
     CMineParams MParams;
     zero(&MParams);
@@ -39,8 +39,7 @@ Jewish::Jewish(CObject* Parent, fixed X, fixed Y, int dir, CWeaponLaunch* lnchdt
     MParams.Damage  = 0;
     MParams.BlastPower = 0;
     
-    ClType = EObjectClass(100);
-    jewdata = lnchdt;
+    ClType = EObjectClass(1145);
     strikeX = X; strikeY = Y;
     hittingX = 0.0; hittingY = 0.0 ;   
     local startX = 0.0;
@@ -63,7 +62,6 @@ Jewish::Jewish(CObject* Parent, fixed X, fixed Y, int dir, CWeaponLaunch* lnchdt
       
     super(Parent, &MParams, &SDesc, false, 0);
     
-    jewdata = lnchdt;
     striking = false;  
     strikeHit = false;
      
@@ -170,38 +168,39 @@ void Jewish::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
       SDesc.Worm = 0;
       SDesc.Team = 0;
       SpX=SpX * 1.5;
-      
-      jewdata->explosion.damage = 80;                          
-      jewdata->explosion.bias = 20;
-      jewdata->explosion.pushPower = 115;    
-      jewdata->explosion.flags = -1;
-      jewdata->timeBeforeExplosion = 15000;
-      jewdata->gravityFactor = 250;
-      jewdata->speedMultipler = 92;
-      jewdata->spriteSize = 4;
-      jewdata->explodeOnSpace = false;
-      jewdata->anim.trailIndex = 116;
-      jewdata->anim.type = WAT_TrackMovement;
-      jewdata->anim.trailPower = 20;
-      jewdata->anim.trailSpeed = 60;
-      jewdata->windFactor = 0;
-      mis = new CMissile(Root->GetObject(25,0), jewdata, &SDesc);
+      jewdata2 = getClustletsData();
+      jewdata2->explosion.damage = 80;                          
+      jewdata2->explosion.bias = 20;
+      jewdata2->explosion.pushPower = 115;    
+      jewdata2->explosion.flags = -1;
+      jewdata2->timeBeforeExplosion = 15000;
+      jewdata2->gravityFactor = 250;
+      jewdata2->speedMultipler = 92;
+      jewdata2->spriteSize = 4;
+      jewdata2->explodeOnSpace = false;
+      jewdata2->anim.trailIndex = 116;
+      jewdata2->anim.type = WAT_TrackMovement;
+      jewdata2->anim.trailPower = 20;
+      jewdata2->anim.trailSpeed = 60;  
+      jewdata2->anim.spriteIndex = 0;
+      jewdata2->windFactor = 0;
+      local mis = new CMissile(Root->GetObject(25,0), jewdata2, &SDesc);
       if (mis!=NullObj)
       {
         mis->WindFactor = 0;
         mis->SpX = 0;
-        mis->misIndex = 99967;
+        mis->misIndex = 12;
         bunkerbusterFallSound->Play(CalculateSoundVolume(PosX,PosY), CalculateSoundPan(PosX,PosY), false);
       }
       striking = true;
       }
- }
+ }                                 
 }  
 
 override void CMissile::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData){    
 super;
   if (Type == M_FRAME){                                                    
-     if (launchdata.anim.spriteIndex == 1500) {                            
+     if (launchdata.speedMultipler == 92 && launchdata.spriteSize == 4) {                            
          if (hydrogenbomb) {                                            
               local sprite = redWeapSheet->Index;                    
               WeapSpriteParams* Params = new WeapSpriteParams;

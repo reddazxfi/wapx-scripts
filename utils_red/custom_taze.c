@@ -292,7 +292,7 @@ bool CWorm::CalculateElectricShock(fixed x, fixed y, int dmg, int* retdmg)  // S
         else return false;
 } 
 
-override void CMissile::DoExplosion(fixed x,fixed y,int PushPower,int Damage,int unkB,int Team)
+override void CMissile::ExplodeAt(fixed x,fixed y)
 {   
         if (isMisElectric)
  
@@ -301,18 +301,11 @@ override void CMissile::DoExplosion(fixed x,fixed y,int PushPower,int Damage,int
         super;    
 }
 
-override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
-{
-        isMisElectric = false;
-  
-        super;
-}
-
 void do_cus_exp_electric(CGObject * sender, int flags, float x, float y, int dmg, int pushPower, float destroyRadius, bool destroy)
 {
         local tier = 0;              
         
-        tier = do_custom_explosion(sender, flags, x, y, dmg, pushPower, destroyRadius, destroy, false, false, true); //actual explosion
+        tier = do_custom_explosion(sender, flags, x, y, dmg, pushPower, destroyRadius, destroy, false, false, true,0); //actual explosion
         
         local radius = float((dmg + 2) / 2);
         createElectricExplosion(x, y, radius);    //effect
