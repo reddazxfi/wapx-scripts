@@ -48,6 +48,14 @@ Jewish::Jewish(CObject* Parent, fixed X, fixed Y, int dir)
     if (direction == 2) direction = -1;
     dir = direction;
     
+    drawSickWorm = false;
+    drawHospital = false;
+    drawPoisonedWorm = false;
+
+    sickHitX = 0; sickHitY = 0;
+    hospHitX = 0; hospHitY = 0;
+    poisHitX = 0; poisHitY = 0;
+    
     if (direction == -1) { startX = GS->LevelSX + 300; endingX = -300.0; }
     else           { startX = -300.0; endingX = GS->LevelSX + 300.0; }
     
@@ -63,7 +71,7 @@ Jewish::Jewish(CObject* Parent, fixed X, fixed Y, int dir)
     super(Parent, &MParams, &SDesc, false, 0);
     
     striking = false;  
-    strikeHit = false;
+    strikeHit = false;    
      
     wrmsp = RandomInt(1,2);       
     if (wrmsp == 1) wrmsp = 242;
@@ -79,35 +87,6 @@ Jewish::Jewish(CObject* Parent, fixed X, fixed Y, int dir)
       
     jew->Play( CalculateSoundVolume(strikeX,strikeY), CalculateSoundPan(strikeX,strikeY), false);
 }
-     
-void Jewish::DrawVictims()
-{    
-   
- if (!strikeHit)
- {
-  Frame = GS->Tick * 0.016;
-  int HitX; int HitY;
-  sickWorm = TraceLine(this, int(strikeX) , -100, int(strikeX), Env->Water, -1, &HitX, &HitY);
-  hittingX = HitX; hittingY = HitY;
-  if (sickWorm!=NullObj)
-  {
-      AddSpriteEx( 7.2 ,HitX , HitY-5, wrmsp, Frame+ 0.002, 0, 0.8);
-      
-      hospital = TraceLine(this, int(strikeX+hosp) , -100, int(strikeX+hosp), Env->Water, -1, &HitX, &HitY);
-      
-      if (hospital!=NullObj)
-      {
-          AddSpriteEx( 15.1 ,HitX, HitY -10, 97, Frame + 0.008, 0, 1.0);
-      } 
-      poisonedWorm =  TraceLine(this, int(strikeX-hosp) , -100, int(strikeX-hosp), Env->Water, -1, &HitX, &HitY);    
-          
-      if (poisonedWorm!=NullObj)
-      {   
-          AddSpriteEx( 7.3 , HitX , HitY -5, 262144 +wrmsp2, Frame, 0, 0.76);
-      }
-  }
- }
-}   
 
 void Jewish::Draw()
 {     
@@ -138,6 +117,69 @@ void Jewish::TakeExplosionDamage(fixed x, fixed y, int dmg)
 	if (fdmg>(0.05)) strikeHit = true;
 }
 
+     
+void Jewish::UpdateVictims()
+{
+    drawSickWorm = false;
+    drawHospital = false;
+    drawPoisonedWorm = false;
+
+    if (!strikeHit)
+    {
+        int HitX; int HitY;
+
+        sickWorm = TraceLine(this, int(strikeX), -100, int(strikeX), Env->Water, -1, &HitX, &HitY);
+        if (sickWorm != NullObj)     
+        {                      
+            drawSickWorm = true;
+            sickHitX = HitX; 
+            sickHitY = HitY;
+            hittingX = HitX; 
+            hittingY = HitY;
+
+            hospital = TraceLine(this, int(strikeX + hosp), -100, int(strikeX + hosp), Env->Water, -1, &HitX, &HitY);
+            if (hospital != NullObj)
+            {
+                drawHospital = true;
+                hospHitX = HitX;
+                hospHitY = HitY;
+            } 
+
+            poisonedWorm = TraceLine(this, int(strikeX - hosp), -100, int(strikeX - hosp), Env->Water, -1, &HitX, &HitY);    
+            if (poisonedWorm != NullObj)
+            {   
+                drawPoisonedWorm = true;
+                poisHitX = HitX;
+                poisHitY = HitY;
+            }
+        }
+    }
+}
+
+void Jewish::DrawVictims()
+{   
+    if (!strikeHit)
+    {
+        Frame = GS->Tick * 0.016;   //(half speed)
+
+        if (drawSickWorm)     
+        {                      
+            AddSpriteEx(7.2, sickHitX, sickHitY - 5, wrmsp, Frame + 0.002, 0, 0.8);
+            
+            if (drawHospital)
+            {
+                AddSpriteEx(15.1, hospHitX, hospHitY - 10, 97, Frame + 0.008, 0, 1.0);
+            } 
+                
+            if (drawPoisonedWorm)
+            {   
+                AddSpriteEx(7.3, poisHitX, poisHitY - 5, 262144 + wrmsp2, Frame, 0, 0.76);
+            }
+        }
+    }
+} 
+
+
 void Jewish::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
 {
  super;
@@ -153,6 +195,8 @@ void Jewish::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
  }
   if (Type == M_FRAME)
  {       
+      UpdateVictims();
+      
       if (gframe > misIndex + 800) Free(true);
       if (strikeHit &&  (direction == 1 && PosX >= endingX) || (direction == -1 && PosX <= endingX)) Free(true);
       GravityFactor = 0;
@@ -183,7 +227,8 @@ void Jewish::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
       jewdata2->anim.trailPower = 20;
       jewdata2->anim.trailSpeed = 60;  
       jewdata2->anim.spriteIndex = 0;
-      jewdata2->windFactor = 0;
+      jewdata2->windFactor = 0;        
+      jewdata2->movementRandomness = 5;
       local mis = new CMissile(Root->GetObject(25,0), jewdata2, &SDesc);
       if (mis!=NullObj)
       {

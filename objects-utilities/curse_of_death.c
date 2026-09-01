@@ -76,18 +76,31 @@ bool ObjWantsCurseHoming(CGObject* obj)
 {             
     if (obj->PosY > Env->Water || obj->IsMaterial == false) return false;             
             //Avoid classes that say they're OC but class itself isn't Class
-    if      (obj->ClType == OC_Mine    && obj is CMine)    { CMine    * mine   = CMine(obj);    if (mine   -> homingIterations < 50) return true; }
-    else if (obj->ClType == OC_Missile && obj is CMissile) { CMissile * mis    = CMissile(obj); if (mis    -> homingIterations < 50) return true; }
-    else if (obj->ClType == OC_OilDrum && obj is COilDrum) { COilDrum * aodrum = COilDrum(obj); if (aodrum -> homingIterations < 50) return true; }
+    if      (obj->ClType == OC_Mine    && obj is CMine)    { CMine    * mine   = CMine(obj);    if (mine   -> homingIterations < 67) return true; }
+    else if (obj->ClType == OC_Missile && obj is CMissile) { CMissile * mis    = CMissile(obj); if (mis    -> homingIterations < 90) return true; }
+    else if (obj->ClType == OC_OilDrum && obj is COilDrum) { COilDrum * aodrum = COilDrum(obj); if (aodrum -> homingIterations < 69) return true; }
     return  (obj is CArrow);
+}
+
+void RefreshObjCooldown()
+{
+    for(local i = 0; i < Env->Objs.Count; i++)
+    {
+         CGObject *obj = Env->Objs.Objs[i];
+         if (obj == NullObj || obj->IsMaterial == false) continue;
+
+         if      (obj is CMissile) { CMissile *mis  = CMissile(obj);  mis->homingIterations   = 0; }
+         else if (obj is CMine)    { CMine    *mine = CMine(obj);     mine->homingIterations  = 0; }
+         else if (obj is COilDrum) { COilDrum *drum = COilDrum(obj);  drum->homingIterations  = 0; }
+    } 
 }
 
 void AssignCurseHomingTargets()
 {                 
-    if (missileQnt > 50)   return;
-    if (Env->Objs.Count > 120) checkCoolDown = 6;
-    else checkCoolDown = 2;
-    if (CursedWormCount == 0) return;
+    if      (missileQnt > 50)       checkCoolDown = int( missileQnt      * 0.15);
+    else if (Env->Objs.Count > 120) checkCoolDown = int( Env->Objs.Count * 0.09);
+    else                            checkCoolDown = 2;
+    if (CursedWormCount == 0) return ;
 
     CWorm* currWorm = GetCurrentWorm();
 
@@ -121,7 +134,7 @@ void AssignCurseHomingTargets()
                 }
                 else continue;
             }
-            else continue
+            else continue;
         }
 
         if (closestWorm != NullObj)
@@ -141,7 +154,7 @@ void chaseTargetCurse(CGObject * obj, CWorm * worm)
             float speed = 12.5;
             float turn  = 0.25;           
             if (obj is CMine)    { CMine    * amine = CMine(obj);    speed = 13.0; turn = 0.12; /* if (amine -> hadntlockedtarget == true){ */ amine -> homingIterations++; }//}  
-            if (obj is CMissile) { CMissile * mis   = CMissile(obj); speed = 25.0; turn = 0.09; /* if (mis   -> hadntlockedtarget == true){ */ mis   -> homingIterations++; }//}
+            if (obj is CMissile) { CMissile * mis   = CMissile(obj); speed = 24.0; turn = 0.09; /* if (mis   -> hadntlockedtarget == true){ */ mis   -> homingIterations++; }//}
             if (obj is COilDrum) { COilDrum * drum  = COilDrum(obj); speed = 9.0;  turn = 0.10; /* if (drum  -> hadntlockedtarget == true){ */ drum  -> homingIterations++; }//}  
             
             if (obj is heliShoot){ speed = 4.0;  turn = 0.20; }
@@ -190,7 +203,10 @@ bool CheckTargetArray(CGObject *obj, CWorm * worm, int i)
 override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
 {
      super;
+     if (Type == M_PRETURNSTART) RefreshObjCooldown();
+     
      if (!someonesAssIsMarked || gframe < 50) return;
+     
      if (Type == M_FRAME)
      {
           if ((gframe % checkCoolDown) == 0 && Root->IsTimerActive() == true)    //With Homing Cooldown
@@ -242,8 +258,8 @@ void CWorm::MultiplyExplosionDamage(CObject *sender, int dPosX, int dPosY, int d
         float dist = sqrt((PosX-dPosX)*(PosX-dPosX) + (PosY-dPosY)*(PosY-dPosY));
         float radius  = explosion_Radius(dmg);
         int   baseDmg = explosion_Damage(dmg, dist, radius);
-        dmgDone = int(float(baseDmg) * (dmgMultiplier - 1.0));  //Add damage onto EXISTING one.
-        
+        int dmgDone = int(float(baseDmg) * (dmgMultiplier - 1.0));  //Add damage onto EXISTING one.
+        if (dmgDone > 0);
         Penetrate(this, dPosX, dPosY, dmgDone);    
 }
 

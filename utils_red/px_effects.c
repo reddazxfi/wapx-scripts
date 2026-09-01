@@ -29,7 +29,7 @@ void px_effects::FirstFrame()
     // Precompute a circle once
     for (int i = 0; i < 361; i++)
     {
-        float ang = (float(i) / 360.0) * 6.28318;
+        float ang = (float(i) / 360.0) * MATH_TWO_PI;
         Master_LUT_Cos[i] = cos(ang);
         Master_LUT_Sin[i] = sin(ang);
     }
@@ -47,8 +47,9 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     // --- Target & Position Setup ---
     targetObj  = target;
     lastKnownX = StartX;
-    lastKnownY = StartY;
-    ownerLess  = (targetObj == NullObj);
+    lastKnownY = StartY;                                             
+    ownerLess  = false;
+    if (target == NullObj)  ownerLess = true;
 
     // --- Core Parameters & Colors ---
     effectType     = type;
@@ -79,13 +80,15 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     shouldEllipse  = false;
 
     // --- Animation Timers & Fade Controls ---
-    explosionTimer   = 0.0; // Coded so that 15 is max, itll look weird after
+    explosionTimer   = 0.0; //
     vanishSpeed      = 1.0; // No lower than 0.5 / -0.5
     expLimit         = 15;  // Extend explosion anim
     expandMultiplier = 3.0; // how far blastRadius grows beyond baseRadius, was hardcoded
     fadeInFrac       = 0.0; // 0.0 = no fade-in (old behavior). e.g. 0.15 = ramp up over first 15% of duration
     blastProgress    = 0.0; // computed once per frame, read by both draw functions
     envelope         = 1.0; // brightness/alpha multiplier after fade-in is applied
+    circumference    = 1.0; // circumference multiplier. if both are the same, circle. if not, oval.  
+    circumferenceSin = 1.0;
 
     // --- Explosion Buffer Defaults ---
     custExp    = false;
@@ -117,12 +120,16 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     cosRot       = 0.0;
     sinRot       = 0.0;
     shiftAngle   = 0.14;
+    linkedAngle  = 0.0;
+    isLinked     = false;
 
     // --- Depth & Engine Init ---
     ZPlane  = 9.9;
-    gZPlane = ZPlane - 0.1;
+    gZPlane = ZPlane - 0.1;   
+    
+    if (effectType == 4 || effectType == 5) shouldExplode = true;   
 
-    super(Root, GS);
+    super(Root, GS);       
 }
 
 void CEffectManager::editParams(int type, int segments, float radius, float noise, int red, int green, int blue, float vanishspd)
@@ -151,6 +158,8 @@ void CEffectManager::editParams(int type, int segments, float radius, float nois
     r = red; g = green; b = blue;
     
     vanishSpeed = vanishspd;
+    
+    if (effectType == 4 || effectType == 5) shouldExplode = true;
 }
 
 void CEffectManager::SetSizeValue(float sizevalue) { sizeValue = sizevalue;  gMult = sizeValue * 2.0; if (gMult > 1.2) gMult = 1.2; }   
@@ -163,7 +172,9 @@ void CEffectManager::SetSegments(int segments) { numSegs = segments; }
 void CEffectManager::SetType(int type) { effectType = type; }     
 void CEffectManager::SetNoise(float noise) { noiseIntensity = noise; }
 void CEffectManager::SetExplosionDuration(float duration) { expLimit = duration; }
-void CEffectManager::SetExpandMultiplier(float mult)      { expandMultiplier = mult; }
+void CEffectManager::SetExpandMultiplier(float mult)      { expandMultiplier = mult; }     
+void CEffectManager::SetCircumferenceMultiplier(float onepointzero)      { circumference = onepointzero; }    // If both are same value = circle, if one is different = oval.
+void CEffectManager::SetCircumferenceMultiplierSin(float onepointzero)   { circumferenceSin = onepointzero; }
 void CEffectManager::BufferChange(int type, int segments, float radius, float noise, int red, int green, int blue, int frames, float vanishspd)
 {
     expType  = type      ;   
@@ -216,6 +227,7 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
         //else if (effectType == 7)  DrawTrailFX();
         else
                 UpdateAndDraw();     
+                
         
         if (managerState == 1) //Explosion
         {
@@ -226,7 +238,7 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
         {
                 drawGlow();  
         }
-        else if (managerState == 1 && effectType == 5)
+        if (managerState == 1 && effectType == 5)
         {                                                                                                 
                 drawGlow();
         }
@@ -234,6 +246,18 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
     if (Type == M_FRAME)
     {
         Calc();
+       /* if (gframe % 3 == 0 )
+        {
+         GG->WriteToChat( 6, "-----------------------", false);
+         GG->WriteToChat( 5, itoa(nullFrameCount), false);    
+         GG->WriteToChat( 7, itoa(explosionTimer), false);
+         GG->WriteToChat( 8, itoa(managerState), false);
+        }*/     
+        
+        if (ownerLess && explosionTimer > expLimit * 2) Free(true);
+        
+        if (vanishSpeed >= -0.5 && vanishSpeed <  0.0) vanishSpeed = -0.51;   
+        if (vanishSpeed >=  0.0 && vanishSpeed <= 0.5) vanishSpeed =  0.51;
         
         if (bufferChange && gframe > bufferFrames )
         {
@@ -243,16 +267,16 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
 
         if (targetObj == NullObj) 
         {
-            nullFrameCount++;
+            nullFrameCount+=1;
             
-            if (effectType == 5 && nullFrameCount == 5 )
+            if (effectType == 5 && nullFrameCount >= 5 )
             {
                 managerState = 1;
                 effectType = 4;
-                explosionTimer = 0;
+                explosionTimer = 0.0;
             }
 
-            if (nullFrameCount == 5 && !ownerLess)
+            if (nullFrameCount >= 5 && !ownerLess)
             {
                 managerState = 1; 
                 if (custExp)
@@ -263,7 +287,7 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
         }         
         else if (nullFrameCount > 0 && targetObj != NullObj)
         {
-            nullFrameCount--;
+            nullFrameCount-=1;
         }
     
         if (managerState == 1) 
@@ -272,20 +296,20 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
         }
         
         // Total frames the blast lasts
-        if (explosionTimer > expLimit && effectType != 5 && frameCount > freeAfter)
+        if ((explosionTimer > expLimit || explosionTimer < -expLimit) && effectType != 5)
         {
             Free (true); // Manager successfully cleans itself up
             return;
+        }     
+        else if (explosionTimer > expLimit && effectType == 5)
+        {
+            explosionTimer = 0;
         }
         if (freeAfter != 0 && frameCount > freeAfter)  //unconditional 
         {
             Free (true); 
             return;
         }    
-        else if (explosionTimer > expLimit && effectType == 5)
-        {
-            explosionTimer = 0;
-        }
     }
     super;
 }
@@ -303,8 +327,10 @@ void CEffectManager::Calc()//SLANG for calculator by the way.
      
      if (effectType == 1 || effectType == 6) currentAngle += shiftAngle;
      currentAngle = NormalizeAngle(currentAngle);
+     
+     if (isLinked && targetObj != NullObj && (abs(targetObj->SpX) + abs(targetObj->SpY)) > 0) currentAngle = atan2(-targetObj->SpX, targetObj->SpY) - MATH_HALF_PI;
 
-     // --- Unified explosion progress, driven by expLimit instead of hardcoded 15 ---
+     // --- Unified explosion progress, driven by expLimit ---
      blastProgress = 0.0;
      if (expLimit > 0.001)
          blastProgress = explosionTimer / expLimit;
@@ -322,7 +348,9 @@ void CEffectManager::Calc()//SLANG for calculator by the way.
      if (envelope < 0.0) envelope = 0.0;
      if (envelope > 1.0) envelope = 1.0;
 }                                                                   
-  
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////  
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////  
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////  
 void CEffectManager::UpdateAndDraw()
 {
     if (managerState == 0)
@@ -350,8 +378,8 @@ void CEffectManager::UpdateAndDraw()
             int lutIndex2 = (j * 360) / numSegs;
             if (lutIndex2 > 359) lutIndex2 = 359;
 
-            uX = Master_LUT_Cos[lutIndex2];
-            uY = Master_LUT_Sin[lutIndex2];
+            uX = Master_LUT_Cos[lutIndex2] * circumference;
+            uY = Master_LUT_Sin[lutIndex2] * circumferenceSin;
 
             // Use sawZapNoise2 so the core moves independently from the outer glow.
             // Multiply the intensity slightly to make the core more jagged.
@@ -379,8 +407,8 @@ void CEffectManager::UpdateAndDraw()
             int lutIndex2 = (j * 360) / numSegs;
             if (lutIndex2 > 359) lutIndex2 = 359;
 
-            uX = Master_LUT_Cos[lutIndex2];
-            uY = Master_LUT_Sin[lutIndex2];
+            uX = Master_LUT_Cos[lutIndex2] * circumference;
+            uY = Master_LUT_Sin[lutIndex2] * circumferenceSin;
 
             liveNoise = sawZapNoise2[j % 22] * noiseIntensity;
             totalRadius = baseRadius + liveNoise;
@@ -392,8 +420,6 @@ void CEffectManager::UpdateAndDraw()
             py = lastKnownY + (rotatedY * totalRadius);
 
             texCoord = float(j) / float(numSegs);
-            
-            // 1. Extremely thin, sharp line instead of a smoothed dome curve 
 
             TexturedBeamPoint(px, py, beamThiccness, texCoord, RGB(r, g, b));
         }
@@ -416,8 +442,8 @@ void CEffectManager::DrawSpinFX()
         int lutIndex = (i * 360) / currentNumSegs;
         if (lutIndex > 359) lutIndex = 359; // clamp
 
-        float uX = Master_LUT_Cos[lutIndex];
-        float uY = Master_LUT_Sin[lutIndex];
+        float uX = Master_LUT_Cos[lutIndex] * circumference;
+        float uY = Master_LUT_Sin[lutIndex] * circumferenceSin;
 
         float dirX = uX * cosRot - uY * sinRot;
         float dirY = uX * sinRot + uY * cosRot;
@@ -455,8 +481,8 @@ void CEffectManager::DrawSpinFX()
     {
         float t = float(i) / float(currentNumSegs);
 
-        float uX = Master_LUT_Cos[i];
-        float uY = Master_LUT_Sin[i];
+        float uX = Master_LUT_Cos[i] * circumference;
+        float uY = Master_LUT_Sin[i] * circumferenceSin;
 
         float dirX = uX * cosRot - uY * sinRot;
         float dirY = uX * sinRot + uY * cosRot;
@@ -494,8 +520,8 @@ void CEffectManager::DrawRingFX() //double ring
         float noiseAmt = sawZapNoise[currentbeam % 16] * (noiseIntensity * 0.5);
         float radius   = (baseRadius + noiseAmt) * 0.85;
 
-        float uX = Master_LUT_Cos[lutIndex2];
-        float uY = Master_LUT_Sin[lutIndex2];
+        float uX = Master_LUT_Cos[lutIndex2] * circumference;
+        float uY = Master_LUT_Sin[lutIndex2] * circumferenceSin;
 
         float px = lastKnownX + (uX * cosRot - uY * sinRot) * radius;
         float py = lastKnownY + (uX * sinRot + uY * cosRot) * radius;
@@ -515,8 +541,8 @@ void CEffectManager::DrawRingFX() //double ring
         float noiseAmt = sawZapNoise2[i % 36] * noiseIntensity; 
         float radius   = baseRadius + noiseAmt;
 
-        float uX = Master_LUT_Cos[lutIndex2];
-        float uY = Master_LUT_Sin[lutIndex2];
+        float uX = (Master_LUT_Cos[lutIndex2]  * circumference);
+        float uY = (Master_LUT_Sin[lutIndex2]  * circumferenceSin);
 
         float px = lastKnownX + (uX * cosRot - uY * sinRot) * radius;
         float py = lastKnownY + (uX * sinRot + uY * cosRot) * radius;
@@ -536,8 +562,8 @@ void CEffectManager::DrawRingFX() //double ring
         float noiseAmt = sawZapNoise2[i % 36] * noiseIntensity; 
         float radius   = baseRadius + noiseAmt;
 
-        float uX = Master_LUT_Cos[lutIndex2];
-        float uY = Master_LUT_Sin[lutIndex2];
+        float uX = Master_LUT_Cos[lutIndex2] * circumference;
+        float uY = Master_LUT_Sin[lutIndex2] * circumference;
 
         float px = lastKnownX + (uX * cosRot - uY * sinRot) * radius;
         float py = lastKnownY + (uX * sinRot + uY * cosRot) * radius;
@@ -566,8 +592,8 @@ void CEffectManager::DrawExplosion()
 
         float noiseAmt = sawZapNoise2[i % 36] * blastRadius * (0.08 * noiseIntensity);
 
-        float px = lastKnownX + (Master_LUT_Cos[lutIndex] * (blastRadius + noiseAmt));
-        float py = lastKnownY + (Master_LUT_Sin[lutIndex] * (blastRadius + noiseAmt));
+        float px = lastKnownX + ((Master_LUT_Cos[lutIndex] *  (blastRadius + noiseAmt))  * circumference);
+        float py = lastKnownY + ((Master_LUT_Sin[lutIndex] *  (blastRadius + noiseAmt))  * circumferenceSin);
         
         float currentThickness = (beamGlowThicc * 0.90) * envelope;  
         if (currentThickness < 1.8) currentThickness = 1.8;
@@ -584,8 +610,8 @@ void CEffectManager::DrawExplosion()
 
         float noiseAmt = sawZapNoise2[i % 36] * blastRadius * (0.08 * noiseIntensity);
 
-        float px = lastKnownX + (Master_LUT_Cos[lutIndex] * (blastRadius + noiseAmt));
-        float py = lastKnownY + (Master_LUT_Sin[lutIndex] * (blastRadius + noiseAmt));
+        float px = lastKnownX + (Master_LUT_Cos[lutIndex] * (blastRadius + noiseAmt)) * circumference;
+        float py = lastKnownY + (Master_LUT_Sin[lutIndex] * (blastRadius + noiseAmt)) * circumferenceSin;
         
         float currentThickness = beamGlowThicc * envelope;
         TexturedBeamPoint(px, py, currentThickness, float(i)/float(numSegs), RGB(fadeR, fadeG, fadeB));
@@ -612,8 +638,8 @@ void CEffectManager::DrawEllipse()
 
         float noiseAmt = sawZapNoise2[i % 36] * blastRadius * (0.08 * noiseIntensity);
 
-        float px = lastKnownX + (Master_LUT_Cos[lutIndex] * (blastRadius * 1.25 + noiseAmt));
-        float py = lastKnownY + (Master_LUT_Sin[lutIndex] * (blastRadius * 0.45 + noiseAmt));
+        float px = lastKnownX + (Master_LUT_Cos[lutIndex] * (blastRadius * 1.25 + noiseAmt)) * circumference;
+        float py = lastKnownY + (Master_LUT_Sin[lutIndex] * (blastRadius * 0.45 + noiseAmt)) * circumferenceSin;
         
         float currentThickness = beamGlowThicc * envelope;  
         if (currentThickness < 1.4) currentThickness = 1.4;
@@ -655,8 +681,8 @@ void CEffectManager::DrawThinSpinFX()
 
         int lutIdx = (i * 360) / numSegs;
         if (lutIdx > 359) lutIdx = 359;
-        float uX = Master_LUT_Cos[lutIdx];
-        float uY = Master_LUT_Sin[lutIdx];
+        float uX = Master_LUT_Cos[lutIdx] * circumference;
+        float uY = Master_LUT_Sin[lutIdx] * circumferenceSin;
 
         // 2D rotation combining currentAngle with segment angle
         float dirX = uX * cosRot - uY * sinRot;
@@ -695,7 +721,7 @@ void CEffectManager::DrawThinSpinFX()
 }
 
    
-override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+/*override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
 {
   super;
  
@@ -704,5 +730,5 @@ override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc
  // zapFX->shouldExplode = true;
     //createEffectExplosion(PosX, PosY, 30);
     //createEffectExplosion(PosX, PosY, 30, 30, 0.1, 200, 150, 90, true, 16, 0.51, 0.0) ;
-}
+}*/
   

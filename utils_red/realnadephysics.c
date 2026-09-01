@@ -5,6 +5,13 @@
 
 require p_sprite_builder, utils_red; 
 
+CTraceRes * reflect;
+
+script realnadephysics::InitGraphic()
+{
+    reflect = new CTraceRes();
+} 
+
 override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
 {                       
  NewBounce = false;   
@@ -71,12 +78,11 @@ override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc
     explosionDmg  =  ldata->explosion.damage;
     
     nadeFriction = 0.0;  // How much it bounces back, 0.65 For normal nades
-    reflect = new CTraceRes();
     flags = 0; 
  }  
 }
 //No need for DoWeapBouncy with this func, but it's cleaner to use that function (because of SpawnCheck).
-void CMissile::ActivateBouncePhysics(CObject* parent, CWeaponLaunch* ldata, CShootDesc* sdata, int flagss, float radius, float restitution, float friction, int maxBounces,int sound, bool exp, wp)
+void CMissile::ActivateBouncePhysics(CObject* parent, CWeaponLaunch* ldata, CShootDesc* sdata, int flagss, float radius, float restitution, float friction, int maxBounces,int sound, bool exp)
 {
     nadeSize  = radius;    
     nadeSound = sound;   
@@ -110,30 +116,19 @@ void CMissile::ActivateBouncePhysics(CObject* parent, CWeaponLaunch* ldata, CSho
     slowframecount = 0.0;                                     
 }
 
-override void CMissile::Free(bool FreeMem)
-{ 
- Dead = true;
- if (FreeMem)
- {
-    if (reflect!=NullObj) delete reflect;
- }
- super;
-} 
-
 override void CMissile::Collide(CGObject* Obj, int type)
 {
-    bool skipRest = false;
+    super; 
 
     if (NewBounce && (launchdata.action == WAction_Dig || launchdata.action == WAction_Roam || launchdata.action == WAction_Homing))
     {
         NewBounce = false;
-        if (reflect != NullObj) delete reflect;
     }
 
     if (!NewBounce)
     {
-        super;
         skipRest = true;
+        return;
     }
 
     if (!skipRest && (attemptedBounces >= 1000 || isStatic))
@@ -194,12 +189,6 @@ override void CMissile::Collide(CGObject* Obj, int type)
    // WriteToChat2( 5, "Attempted Bounces: ",itoa(attemptedBounces), false) ;
 }
 
-override bool CMissile::Reflect(CGObject* Obj,int type)
-{
- if (bouncing) return false;
- else super;
-}
-
 void CMissile::bounceSound(int reason, int sound)
 {         
   if ((reason == 2 && sound <= 0) || (reason == 1 && nadeSound <= 0)) return;
@@ -212,12 +201,6 @@ void CMissile::bounceSound(int reason, int sound)
   PlayLocalSound(sound, 3.0, vol, 1.0);          
 } 
                                 
-override void CMissile::ExplodeAt(fixed x,fixed y)
-{
- Dead = true;
- super;                       
-}
-
 void CMissile::DoBounceExplosion()
 {
      //Trigger explosion exactly once, you know why.
@@ -235,7 +218,7 @@ void CMissile::DoBounceExplosion()
 }
 
   ////////////////////////////////////////////////////////////////////    
- //////////////////////////////MESSAGE///////////////////////////////    
+ //////////////////////////////MESSAGE///////////////////////////////             
 ////////////////////////////////////////////////////////////////////        
 override void CMissile::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
 {
@@ -251,9 +234,10 @@ override void CMissile::Message(CObject* sender, EMType Type, int MSize, CMessag
         ///local clipping = CheckSpawnPoint(PosX,PosY,safeAirPosX, safeAirPosY, ColMask, 2, CMASK_TERRAIN, &clpX, &clpY, 5);
         //if (clipping){
         //PosX = clpX; PosY = clpY; }
-        
+        if (bounceCounter >= (bounceLimit -1) ) { ExplodeAt(PosX, PosY); Dead = true; isStatic = true;  }
         if (FreeMe){isStatic = true; Dead = true; Free(true); return;}
         //if (ignoreCol!=NullObj)GG->WriteToChat( 7, classtoString(ignoreCol->ClType), false);
+        
         if ( CheckMaskAt(this, ColMask, int(PosX), int(PosY), -1) == NullObj )
         {
               safeAirPosX = PosX;
@@ -278,8 +262,8 @@ override void CMissile::Message(CObject* sender, EMType Type, int MSize, CMessag
         if (SpY < -25.0) SpY = -25.0;
         // snapshots
         snapBounces = bounceCounter; snapBounces1 = snapBounces;  
-        if (gframe % 2 == 0) 
-       {RegPosX1 = PosX;    RegPosY1 = PosY; }
+        
+        RegPosX1 = PosX;    RegPosY1 = PosY; 
         RegPSpX1 = RegPSpX; RegPSpY1 = RegPSpY;
         RegPSpX  = SpX;     RegPSpY  = SpY; 
     }       
