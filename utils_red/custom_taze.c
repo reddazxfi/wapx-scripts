@@ -301,14 +301,16 @@ override void CMissile::ExplodeAt(fixed x,fixed y)
         super;    
 }
 
-void do_cus_exp_electric(CGObject * sender, int flags, float x, float y, int dmg, int pushPower, float destroyRadius, bool destroy)
+CEffectManager *do_cus_exp_electric(CGObject * sender, int flags, float x, float y, int dmg, int pushPower, float destroyRadius, bool destroy)
 {
         local tier = 0;              
         
         tier = do_custom_explosion(sender, flags, x, y, dmg, pushPower, destroyRadius, destroy, false, false, true,0); //actual explosion
         
         local radius = float((dmg + 2) / 2);
-        createElectricExplosion(x, y, radius);    //effect
+        local zapEffEx = createElectricExplosion(x, y, radius);    //effect
         
-        do_explosion_particles( x, y, tier, false, tier > 1, false, false, true, false, 100, 120, 190);      
+        do_explosion_particles( x, y, tier, false, tier > 1, false, false, true, false, 100, 120, 190);     
+        
+        return zapEffEx; 
 }

@@ -35,7 +35,6 @@ int do_custom_explosion(CGObject * sender, int flags, fixed x, fixed y, int dmg,
       {
             local obj = CGObject(Env->Objs.Objs[i]);
             if (obj == NullObj) continue;
-            if (obj->ClType == OC_Cross) continue;
             if (obj is PxDeadWorm == true) continue;
             
             if (obj != NullObj && ((flags & obj->MaskIndex) == 0 || flags == -1))
@@ -68,7 +67,8 @@ int do_custom_explosion(CGObject * sender, int flags, fixed x, fixed y, int dmg,
 
                         pushX = (dx / dist) * pushForce;
                         pushY = (dy / dist) * pushForce;
-                  }
+                  } 
+                  if (obj->ClType == OC_Cross || (obj->ObjState == WS_FROZEN && !taze)) { obj->SpY = pushY; continue; }
                   
                   if (int(dmgDone) == 0) continue;
 
@@ -107,15 +107,21 @@ int do_custom_explosion(CGObject * sender, int flags, fixed x, fixed y, int dmg,
                   }
             }
       }
+      
       }
       if (destroy)
       {
             GG->land->MakeHole(destroyRadius, ePosX, ePosY);
-      }                                              
+      }  
+      if (sender->ClType == OC_Missile || sender is CMissile == true || sender is CMine == true ||  sender is COilDrum == true)
+      {
+            local mis = CMissile(sender); 
+            mis->OnCustomExplosion(dmg, pushPower, targetsHit);   
+      }                                            
       if (particles)
       {
         //Explosion Tier (0 to 3 max)
-        int tier = (dmg / 25) - 1; 
+        int tier = (dmg / 22) - 1; 
         if (tier > 3) tier = 3;
         if (tier < 0) tier = 0;
 
@@ -263,11 +269,6 @@ int do_custom_explosion(CGObject * sender, int flags, fixed x, fixed y, int dmg,
             }
       }
 
-      }
-      if (sender is CExplosionManager == false && (sender is CMissile == true || sender is CMine == true ||  sender is COilDrum == true))
-      {
-            local mis = CMissile(sender); 
-            mis->OnCustomExplosion(dmg, pushPower, targetsHit);   
       }
       return tier;
 }  
@@ -505,7 +506,6 @@ void drawCustomExplosionParticles(float ePosX, float ePosY, int tier, int flareC
             
             local zflare = new CFlare(ePosX, ePosY, flareIndex, RandomInt(180,290), RandomFloat(0.7,1.0));
         }                    
-
        
         // Smokes
         local tierMultiplier = tier;
@@ -628,12 +628,7 @@ void CMine::OnCustomExplosion(int dmg, int pushPower, int nTargetsHit)
 void COilDrum::OnCustomExplosion(int dmg, int pushPower, int nTargetsHit)
 {}
 
-override void CMissile::OnCustomExplosion(int dmg, int pushPower, int nTargetsHit)
-{
-      //PlayLocalSound(95, 5, 1.0, 1.0);   //what a good example
-}
-/*
-override void CMissile::ExplodeAt(fixed x,fixed y)
+/*override void CMissile::ExplodeAt(fixed x,fixed y)
 {                                                   // (sender, flags, x, y, dmg, pushPower, destroyRadius, destroy, false, false);
       if (launchdata.anim.spriteIndex != 84 && launchdata.anim.spriteIndex != 85) do_custom_explosion(this,-1, PosX, PosY, launchdata.explosion.damage, launchdata.explosion.pushPower, 20, true, true,true);   //test
 }  */

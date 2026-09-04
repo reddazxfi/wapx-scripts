@@ -1,4 +1,4 @@
-require utils, utils_pyroman, p_sprite_builder, weapon_magnet, pxeffects;
+require utils, utils_pyroman, p_sprite_builder, weapon_magnet, pxeffects, map_object_saw_media;
 
 CSprite* sawImg;   
 CSprite* sawEle;     
@@ -66,6 +66,7 @@ CSaw::CSaw(CObject* Parent, CShootDesc* Desc, float sScale)
     
     sawHP = 20.0;
     stopRotation = false;
+    stopped = false;
     
     SawOut = 0;
     SawOutBlood = subSprIndex(10, 1); SawOutBlood2 = subSprIndex(10, 2); 
@@ -122,7 +123,7 @@ CSaw::CSaw(CObject* Parent, CShootDesc* Desc, float sScale)
 
 void CSaw::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
 {
- if (Type == M_PRETURNSTART || Type == M_TURNBEGIN) {OnTurnHits = 0; stopRotation = false; if (supercharged) eleFuel--; }
+ if (Type == M_PRETURNSTART || Type == M_TURNBEGIN) {OnTurnHits = 0; stopRotation = false; if (supercharged) eleFuel--; if (!isDestructible) stopped = false; }
  /*if (Type == M_DRAWQUEUE && supercharged)
  {
     SetColorMod(ARGB(255, 90, 110, 170), 8);  
@@ -148,7 +149,8 @@ void CSaw::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
    if (supercharged && !eleSoundPlayed)
    {
       Zap();  // For spawn script and things i might have missed. Tazer and Lightning directly trigger saw->Zap() anyways
-   }   
+   }             
+   if (!isDestructible){ sawHP = 999;  eleFuel = 20;}
    if (sawHP < 0) sawHP = 0;
    
    if (sawHP == 0 && isDestructible)
@@ -178,14 +180,17 @@ void CSaw::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
       if (SawCheckMask == NullObj || SawCheckMask == CColMask(NullObj)) SawCheckMask = new CColMask(SawCollisionUnit, SawCollisionUnit, MakeCircleMask(SawCollisionUnit));
       firstSpawned = false;
    }
+   //if (!isDestructible) { stopped = false; eleFuel = 20; }        
+   if (gframe % 10 == 0) stopRotation = false;    //only for worms
    
-   if (!isDestructible) { stopped = false; eleFuel = 20; }
+   if (stopped) stopRotation = true;  
+   else stopRotation = false;
+   
    if (stopped) return;
    
    //Main Code          
-   if (gframe % 10 == 0) stopRotation = false;    //only for worms
    
-   processSawCollission();
+   processSawCollission();   
 
    if (OnTurnHits < OnTurnHitLimit && !stopRotation && !stopped) sawRotation = sawRotation - rotationFactor;   //stop saw realistically if limit.   
    sawRotation = NormalizeAngle(sawRotation);  
@@ -354,14 +359,19 @@ void CSaw::processSawCollission()
 				continue;
 			}
 
-			if (obj is CMine == true || obj is CBee == true)
+			if (obj is CMine == true)
 			{
 			        local amine = CMine(obj);
 			        if (amine == NullObj) return;
 			        if (amine->sawhitlimit<20 && amine->hitFrame >= 5)
 			        {
 			                OnTurnHits++;
-			                amine->sawhitlimit = amine->sawhitlimit + 1;  
+			                
+				        if (#ELECTRIC_PLUGIN)
+				        {
+				             if (supercharged && amine->ClType == OC_Mine) amine->TazeMine();
+                          	        }
+                                        amine->sawhitlimit = amine->sawhitlimit + 1;  
                                         SendMessage(obj, 15);
                                         if (amine!=NullObj)
                                         {
@@ -370,10 +380,6 @@ void CSaw::processSawCollission()
                                         }
                                         ClankSound(hitPX, hitPY, CalculateSoundVolume(hitPX, hitPY) * soundMultiplier);
 				}
-			//	if (#ELECTRIC_PLUGIN)
-			//	{
-			//	        if (obj->ClType == OC_Mine) amine->Supercharge();
-			//	}
                                         //continue;
 				continue;
                         }
@@ -442,15 +448,7 @@ void CSaw::SendMessage(CGObject* obj, int dmg)
 	msg.params[5]	= dmg;
 	msg.params[6]	= 0;
 	
-	if (obj is CBee == true)  
-	{
-		msg.params[5]	= dmg+15;    
-	}
-        else if (obj is CCustomTurret == true)  
-	{
-		msg.params[5]	= dmg*6;  
-        }   
-	else if (obj is PxSentryGun == true)  
+	if (obj is PxSentryGun == true)  
 	{
 		msg.params[5]	= dmg*4;
 	}
@@ -479,7 +477,8 @@ void CSaw::SendMessage(CGObject* obj, int dmg)
 	if(#WEAPON_CUSTOMTURRET)
 	{
 		if(obj is CCustomTurret == true)
-		{
+		{      
+		        msg.params[5]	= dmg*6;  
 			CCustomTurret *custur = CCustomTurret(obj);
 			custur->ammoCurrent = 0;
 		}
@@ -740,7 +739,7 @@ void CSaw::Draw()
     } 
     
     local blendT = 14;
-    if (SAWTEAM == 5) blend = 8;
+    if (SAWTEAM == 5) blendT = 8;
     
     if (timesCollided < 7 && SAWTEAM>=0) 
     {  hasColorMod = true;   

@@ -127,14 +127,16 @@ override void CMissile::Collide(CGObject* Obj, int type)
 
     if (!NewBounce)
     {
-        skipRest = true;
+        skipRest = true;    
+        bounceCounter++;
         return;
     }
 
     if (!skipRest && (attemptedBounces >= 1000 || isStatic))
     {
         super;   //Engine behavior then replace its calc with my thing   
-        attemptedBounces -= 1.0;
+        attemptedBounces -= 1.0;  
+        bounceCounter++;
         if (!doExplosionOnTouch) bounceCounter += 1;
         else queueExplosion = true;     //Exploding this frame will remove slope to detect (duh)
         isStatic = true;       //Give it a second chance by bouncing originally some times
@@ -147,7 +149,7 @@ override void CMissile::Collide(CGObject* Obj, int type)
         if (Obj != NullObj && bouncesInFrame == 0)  //Triggering explosion once this frame
         {
             super;
-            if (!doExplosionOnTouch) bounceCounter++;    //Increment this only on explosions 
+            bounceCounter++;    //Increment this only on explosions 
             if (bounceCounter == 55) { nadeRestitution -= 0.12; } //only once
             if (bounceCounter == 105) { nadeRestitution -= 0.10; }  //okay maybe twice
             if (nadeRestitution < 0.10) nadeRestitution = 0.10;   // but not thrice
@@ -234,10 +236,9 @@ override void CMissile::Message(CObject* sender, EMType Type, int MSize, CMessag
         ///local clipping = CheckSpawnPoint(PosX,PosY,safeAirPosX, safeAirPosY, ColMask, 2, CMASK_TERRAIN, &clpX, &clpY, 5);
         //if (clipping){
         //PosX = clpX; PosY = clpY; }
-        if (bounceCounter >= (bounceLimit -1) ) { ExplodeAt(PosX, PosY); Dead = true; isStatic = true;  }
+        
         if (FreeMe){isStatic = true; Dead = true; Free(true); return;}
         //if (ignoreCol!=NullObj)GG->WriteToChat( 7, classtoString(ignoreCol->ClType), false);
-        
         if ( CheckMaskAt(this, ColMask, int(PosX), int(PosY), -1) == NullObj )
         {
               safeAirPosX = PosX;
@@ -262,8 +263,8 @@ override void CMissile::Message(CObject* sender, EMType Type, int MSize, CMessag
         if (SpY < -25.0) SpY = -25.0;
         // snapshots
         snapBounces = bounceCounter; snapBounces1 = snapBounces;  
-        
-        RegPosX1 = PosX;    RegPosY1 = PosY; 
+        if (gframe % 2 == 0) 
+       {RegPosX1 = PosX;    RegPosY1 = PosY; }
         RegPSpX1 = RegPSpX; RegPSpY1 = RegPSpY;
         RegPSpX  = SpX;     RegPSpY  = SpY; 
     }       
@@ -328,10 +329,10 @@ override void CMissile::Message(CObject* sender, EMType Type, int MSize, CMessag
         if (failCount>2) 
           failCount =0;
         
-        if ((bounceCounter - snapBounces) > 1)    //Only increment 1 bounce per frame
+        /*if ((bounceCounter - snapBounces) > 1)    //Only increment 1 bounce per frame
         bounceCounter = snapBounces + 1;
         if ((bounceCounter - snapBounces1) > 2 )
-        bounceCounter = snapBounces1 + 2;
+        bounceCounter = snapBounces1 + 2;     */
     }
     if (Type == M_FRAME && !Dead)
     {

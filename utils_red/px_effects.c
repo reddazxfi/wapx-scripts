@@ -64,6 +64,9 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     rgb     = RGB(red, green, blue); //unused
     glowrgb = RGB(red * 0.72, green * 0.72, blue * 0.72);
     glow    = true;
+    isRainbow = false;
+    rainbowHue = RandomFloat(0.0,1.0);
+    rainbowSpeed = 0.012;
 
     // --- State Flags & Frame Counters ---
     managerState   = 0;   //0 is active animation, 1 is explosion anim
@@ -122,6 +125,38 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     shiftAngle   = 0.14;
     linkedAngle  = 0.0;
     isLinked     = false;
+    
+    // --- ReachPoint ---
+    curveType  = 0;      // 0 = straight, 1 = quadratic bezier (arc), 2 = circular arc
+    curveBulge = 0.04;     // how far the curve bows out (bezier control point offset)
+    arcRadius  = 5.0;      // used only for curveType == 2
+    reachFromX = 0.0; reachFromY = 0.0;
+    reachToX = 0.0;    reachToY = 0.0;
+    hasReachTarget = false;
+    reachExpand = 0.03;
+    reachBow = 0.2;
+    reachProgress = 0.0;
+    reachSpeed = 0.2;
+    rayThickness = 4.0;
+    rayGlowThick = 6.5;
+    raySegments = 16;      
+    rayPersists = false;
+    
+    isTrail = false;
+    trailWavy = false;
+    StraightTrail = false;
+    midThickEdgeThin = false;
+    trailPastX = new int[9999];   
+    trailPastY = new int[9999];
+    trailAmount = 0;
+    trailMaxL = 30;
+    treshold = 3;
+    drawConventionalEffects = true;
+    trailSnapped = false;
+    customTrail = false;
+    
+    //trailPastX[0] = StartX;     
+    //trailPastY[0] = StartY;
 
     // --- Depth & Engine Init ---
     ZPlane  = 9.9;
@@ -130,6 +165,15 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     if (effectType == 4 || effectType == 5) shouldExplode = true;   
 
     super(Root, GS);       
+}
+
+void CEffectManager::Free(bool FreeMem)
+{
+ drawConventionalEffects = false;
+ trailAmount = 0;
+ delete trailPastX;
+ delete trailPastY;
+ super;
 }
 
 void CEffectManager::editParams(int type, int segments, float radius, float noise, int red, int green, int blue, float vanishspd)
@@ -162,6 +206,7 @@ void CEffectManager::editParams(int type, int segments, float radius, float nois
     if (effectType == 4 || effectType == 5) shouldExplode = true;
 }
 
+void CEffectManager::LinkTo(CGObject *target, bool lockRotation){  targetObj = target; ownerLess = false; isLinked = lockRotation; }
 void CEffectManager::SetSizeValue(float sizevalue) { sizeValue = sizevalue;  gMult = sizeValue * 2.0; if (gMult > 1.2) gMult = 1.2; }   
 void CEffectManager::SetBeamThickness(float beamthic) { beamThiccness = beamthic; }
 void CEffectManager::SetBeamGlowThickness(float beamgt) { beamGlowThicc = beamgt; }
@@ -173,8 +218,9 @@ void CEffectManager::SetType(int type) { effectType = type; }
 void CEffectManager::SetNoise(float noise) { noiseIntensity = noise; }
 void CEffectManager::SetExplosionDuration(float duration) { expLimit = duration; }
 void CEffectManager::SetExpandMultiplier(float mult)      { expandMultiplier = mult; }     
-void CEffectManager::SetCircumferenceMultiplier(float onepointzero)      { circumference = onepointzero; }    // If both are same value = circle, if one is different = oval.
-void CEffectManager::SetCircumferenceMultiplierSin(float onepointzero)   { circumferenceSin = onepointzero; }
+void CEffectManager::SetCircumferenceMultiplier(float onepointzero)    { circumference = onepointzero; }   
+// If both are same value = circle, if one is different = oval. 
+void CEffectManager::SetCircumferenceMultiplierSin(float onepointzero) { circumferenceSin = onepointzero; }
 void CEffectManager::BufferChange(int type, int segments, float radius, float noise, int red, int green, int blue, int frames, float vanishspd)
 {
     expType  = type      ;   
@@ -200,6 +246,126 @@ void CEffectManager::SetVanishSpeedClamped(float speed)
     if (speed < 0.0 && speed > -0.05) speed = -0.05;
     vanishSpeed = speed;
 }
+void CEffectManager::SetRainbowMode(bool enable, float speed, float startOffset)
+{
+    isRainbow    = enable;
+    rainbowSpeed = speed;
+    rainbowHue   = startOffset;   // 0.0-1.0, lets two instances start at different colors
+}
+void CEffectManager::SetTrail(int maxLength, int delayTreshold, int type)
+{
+  isTrail = true;
+  treshold =  delayTreshold;
+  if (type == 1)  midThickEdgeThin = true;
+  else if (type == 2)  trailWavy = true;
+}
+
+void CEffectManager::SetTarget(float fromX, float fromY, float toX, float toY, int type, float speed, float bulge)
+{
+    reachFromX     = fromX;
+    reachFromY     = fromY;
+    reachToX       = toX;
+    reachToY       = toY;
+    hasReachTarget = true;
+    reachProgress  = 0.0;    
+    curveType  = type;
+    curveBulge = bulge;   
+    reachSpeed = speed;
+}
+void CEffectManager::SetTargetNoTerrain(float fromX, float fromY, float toX, float toY, int type, float speed,  float bulge)
+{
+    int hitx; int hity;
+    local obj = TraceLine(this,fromX,fromY,toX,toY, CMASK_TERRAIN, &hitx, &hity);
+    reachFromX     = fromX;
+    reachFromY     = fromY;
+    reachToX       = hitx;
+    reachToY       = hity;
+    hasReachTarget = true;
+    reachProgress  = 0.0;    
+    curveType  = type;
+    curveBulge = bulge;
+    reachSpeed = speed;
+}
+void CEffectManager::ClearTarget()
+{
+    if (rayPersists) return;
+    hasReachTarget = false;
+    reachProgress  = 0.0;
+}
+
+void CEffectManager::UpdateType4Reach()
+{
+    if (!hasReachTarget) return;
+    
+    reachProgress += reachSpeed;
+    if (reachProgress > 1.0) reachProgress = 1.0;
+}
+
+// Evaluates a point at parameter t (0.0 to 1.0) along the chosen curve shape
+void CEffectManager::PointOnCurve(float t, float* outX, float* outY)
+{
+    float dx = reachToX - reachFromX;
+    float dy = reachToY - reachFromY;
+    float dist = sqrt(dx*dx + dy*dy);
+    if (dist < 0.001) { *outX = reachFromX; *outY = reachFromY; return; }
+
+    float perpX = 0.0 - dy / dist;
+    float perpY =       dx / dist;
+
+    if (curveType == 0)
+    {
+        // Straight line
+        *outX = reachFromX + dx * t;
+        *outY = reachFromY + dy * t;
+        return;
+    }
+
+    if (curveType == 1)
+    {
+        // Quadratic bezier: control point offset perpendicular at the midpoint
+        float midX = (reachFromX + reachToX) * 0.5 + perpX * curveBulge;
+        float midY = (reachFromY + reachToY) * 0.5 + perpY * curveBulge;
+
+        float oneMinusT = 1.0 - t;
+        *outX = oneMinusT*oneMinusT*reachFromX + 2.0*oneMinusT*t*midX + t*t*reachToX;
+        *outY = oneMinusT*oneMinusT*reachFromY + 2.0*oneMinusT*t*midY + t*t*reachToY;
+        return;
+    }
+
+    if (curveType == 2)
+    {
+        // Circular arc: sweep around a center point derived from bulge
+        // (bulge here acts as the arc's sagitta - how far it bows)
+        float chordHalf = dist * 0.5;
+        float sagitta = curveBulge;
+        if (sagitta < 0.001) sagitta = 0.001;
+
+        float radius = (chordHalf*chordHalf + sagitta*sagitta) / (2.0 * sagitta);
+
+        float midX = (reachFromX + reachToX) * 0.5;
+        float midY = (reachFromY + reachToY) * 0.5;
+
+        float centerX = midX - perpX * (radius - sagitta);
+        float centerY = midY - perpY * (radius - sagitta);
+
+        float startAng = atan2(reachFromY - centerY, reachFromX - centerX);
+        float endAng   = atan2(reachToY   - centerY, reachToX   - centerX);
+
+        // Choose shortest sweep direction
+        float diff = endAng - startAng;
+        if (diff > MATH_PI)  diff -= MATH_TWO_PI;
+        if (diff < -MATH_PI) diff += MATH_TWO_PI;
+
+        float ang = startAng + diff * t;
+        *outX = centerX + cos(ang) * radius;
+        *outY = centerY + sin(ang) * radius;
+        return;
+    }
+
+    // Fallback
+    *outX = reachFromX + dx * t;
+    *outY = reachFromY + dy * t;
+}
                                                                    
 void CEffectManager::drawGlow()
 {
@@ -216,14 +382,17 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
 { 
     if (Type == M_DRAWQUEUE)
     {
-        if (ZPlane < 1.1) ZPlane = 1.1;
+    if (drawConventionalEffects)   {
+        if (ZPlane < 1.1) ZPlane = 1.1;   
+        if (hasReachTarget) DrawReachPoint();  
         if (effectType == 0)       UpdateAndDraw();
         else if (effectType == 1)  DrawSpinFX();              
         else if (effectType == 2)  DrawRingFX();
         else if (effectType == 3)  DrawTrailFX();
         else if (effectType == 4)  managerState = 1;  // Explosion    
         else if (effectType == 5)  managerState = 1;  // Pulsate
-        else if (effectType == 6)  DrawThinSpinFX();    
+        else if (effectType == 6)  DrawThinSpinFX(); 
+        else if (effectType == 99) {}   
         //else if (effectType == 7)  DrawTrailFX();
         else
                 UpdateAndDraw();     
@@ -240,13 +409,16 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
         }
         if (managerState == 1 && effectType == 5)
         {                                                                                                 
-                drawGlow();
-        }
+                if (glow) drawGlow();
+        }   
+    }    
+    if (isTrail || customTrail) DrawTrail();    
+     
     }
     if (Type == M_FRAME)
     {
         Calc();
-       /* if (gframe % 3 == 0 )
+        /*if (gframe % 3 == 0 )
         {
          GG->WriteToChat( 6, "-----------------------", false);
          GG->WriteToChat( 5, itoa(nullFrameCount), false);    
@@ -254,7 +426,7 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
          GG->WriteToChat( 8, itoa(managerState), false);
         }*/     
         
-        if (ownerLess && explosionTimer > expLimit * 2) Free(true);
+        if (ownerLess && explosionTimer > expLimit * 2.5) Free(true);  //fallback
         
         if (vanishSpeed >= -0.5 && vanishSpeed <  0.0) vanishSpeed = -0.51;   
         if (vanishSpeed >=  0.0 && vanishSpeed <= 0.5) vanishSpeed =  0.51;
@@ -298,7 +470,7 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
         // Total frames the blast lasts
         if ((explosionTimer > expLimit || explosionTimer < -expLimit) && effectType != 5)
         {
-            Free (true); // Manager successfully cleans itself up
+            TryFree(); // Manager successfully cleans itself up
             return;
         }     
         else if (explosionTimer > expLimit && effectType == 5)
@@ -307,11 +479,35 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
         }
         if (freeAfter != 0 && frameCount > freeAfter)  //unconditional 
         {
-            Free (true); 
+            TryFree(); 
             return;
         }    
     }
     super;
+    TryFree();
+}
+
+void CEffectManager::TryFree()
+{
+ local Condition1 = false;   
+ local Condition2 = false;
+ local Condition3 = false;
+ 
+ 
+ if (explosionTimer > expLimit)
+ Condition1 = true;
+
+ if (frameCount > freeAfter)
+ Condition2 = true;
+
+ if (isTrail && trailSnapped)
+ Condition3 = true;
+ if (!isTrail)
+ Condition3 = true;
+ 
+ if (Condition1 || (Condition2 && freeAfter!=0)) drawConventionalEffects = false;
+ 
+ if (Condition1 && Condition2 && Condition3) Free(true);
 }
 
 void CEffectManager::Calc()//SLANG for calculator by the way.
@@ -321,7 +517,24 @@ void CEffectManager::Calc()//SLANG for calculator by the way.
           lastKnownX = targetObj->PosX;
           lastKnownY = targetObj->PosY;            
      }
-     frameCount++;
+     frameCount++;     
+     
+     if (isRainbow)
+     {
+         CalculateRainbow();
+     }
+     if (isTrail && (gframe % treshold) == 0)
+     {
+          FillTrail();
+     }
+     if (managerState == 1 && effectType != 5)
+     {
+          DetractTrail();
+     }
+     //TrackMaster();   
+     
+     UpdateType4Reach();
+     
      cosRot = cos(currentAngle);
      sinRot = sin(currentAngle);   
      
@@ -347,7 +560,37 @@ void CEffectManager::Calc()//SLANG for calculator by the way.
      }
      if (envelope < 0.0) envelope = 0.0;
      if (envelope > 1.0) envelope = 1.0;
-}                                                                   
+}  
+
+int CEffectManager::HueToRGBLocal(float hue)
+{
+    // Wrap hue into 0.0 .. 1.0
+    hue = hue - float(int(hue));
+    if (hue < 0.0) hue += 1.0;
+
+    // Convert 0..1 to 0..2PI radians
+    float rad = hue * 6.2831853; 
+
+    // Center at 180, amplitude 75 -> Keeps RGB floor at 105 (no black zones)
+    int rr = int(180.0 + 75.0 * sin(rad));
+    int gg = int(180.0 + 75.0 * sin(rad + 2.0943951)); // +120 deg
+    int bb = int(180.0 + 75.0 * sin(rad + 4.1887902)); // +240 deg
+
+    return RGB(rr, gg, bb);
+}
+
+void CEffectManager::CalculateRainbow()
+{
+         rainbowHue += rainbowSpeed;
+         if (rainbowHue > 1.0) rainbowHue -= 1.0;
+
+         local packed = HueToRGBLocal(rainbowHue);
+         r = (packed >> 16) & 255;
+         g = (packed >> 8)  & 255;
+         b = packed & 255;
+
+         glowrgb = RGB(int(float(r) * 0.79), int(float(g) * 0.79), int(float(b) * 0.79));
+}                                                                
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////  
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////  
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////  
@@ -719,16 +962,270 @@ void CEffectManager::DrawThinSpinFX()
     }
     EndTexturedBeam();
 }
-
-   
-/*override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc* sdata)
+void CEffectManager::DrawReachPoint()
 {
-  super;
- 
-  //CEffectManager* zapFX = new CElectricSpriteManager(this, PosX, PosY, 2, 30, 60, 0.001, 110, 190, 255) ;
- // if (zapFX!=NullObj)
- // zapFX->shouldExplode = true;
-    //createEffectExplosion(PosX, PosY, 30);
-    //createEffectExplosion(PosX, PosY, 30, 30, 0.1, 200, 150, 90, true, 16, 0.51, 0.0) ;
-}*/
-  
+    if (!hasReachTarget) return;
+    
+    int drawSegs = raySegments;   // more segments = smoother curve
+    float tMax   = reachProgress;
+    
+    //Main Sharp Beam
+    StartTexturedBeam(this, ZPlane, tazer_lightningBeamSprite->Index, 0.0, 1);
+    for (local i = 0; i <= drawSegs; i++)
+    {
+        float t = (float(i) / float(drawSegs)) * tMax;
+        
+        float bx; float by;
+        PointOnCurve(t, &bx, &by);
+        
+        // Noise still applies perpendicular to LOCAL tangent, not global perp
+        // approximate tangent via nearby curve sample
+        float t2 = t + 0.02;
+        if (t2 > 1.0) t2 = 1.0;
+        float bx2; float by2;
+        PointOnCurve(t2, &bx2, &by2);
+        
+        float tanX = bx2 - bx;
+        float tanY = by2 - by;
+        float tanLen = sqrt(tanX*tanX + tanY*tanY);
+        float nX = 0.0; float nY = 0.0;
+        if (tanLen > 0.001) { nX = 0.0 - tanY/tanLen; nY = tanX/tanLen; }
+        
+        float noiseAmt = sawZapNoise[i % 16] * noiseIntensity;
+        bx += nX * noiseAmt;
+        by += nY * noiseAmt;
+        
+        float f = rayThickness * t * (1.0 - t) + 0.15;
+        if (f > 1.0) f = 1.0;
+        
+        int dr = int(float(r) * f);
+        int dg = int(float(g) * f);
+        int db = int(float(b) * f);
+        
+        TexturedBeamPoint(bx, by, f * rayThickness, t, RGB(dr, dg, db));
+        
+       /* if (i % 2 != 0)// == drawSegs)
+        {
+            CQuad q;
+            FillSpriteQuad(&q, tazer_lightningGlowSprite->Index, 0, 0);
+            TransformQuad(&q, 0, 0.4, 0.4, bx, by);
+            q.blend = 1;
+            for (int k = 0; k < 4; k++) q.v[k].color = RGB(dr, dg, db);
+            AddSpriteQ(9.9, &q, tazer_lightningGlowSprite->Index, 0, 64);
+        }*/
+    }
+    EndTexturedBeam();
+    
+    //Glow
+    StartTexturedBeam(this, ZPlane, beam_glowSprite->Index, 0.0, 1);
+    for (local i = 0; i <= drawSegs; i++)
+    {
+        float t = (float(i) / float(drawSegs)) * tMax;
+        
+        float bx; float by;
+        PointOnCurve(t, &bx, &by);
+        
+        // Noise still applies perpendicular to LOCAL tangent, not global perp
+        // approximate tangent via nearby curve sample
+        float t2 = t + 0.02;
+        if (t2 > 1.0) t2 = 1.0;
+        float bx2; float by2;
+        PointOnCurve(t2, &bx2, &by2);
+        
+        float tanX = bx2 - bx;
+        float tanY = by2 - by;
+        float tanLen = sqrt(tanX*tanX + tanY*tanY);
+        float nX = 0.0; float nY = 0.0;
+        if (tanLen > 0.001) { nX = 0.0 - tanY/tanLen; nY = tanX/tanLen; }
+        
+        float noiseAmt = sawZapNoise[i % 16] * noiseIntensity;
+        bx += nX * noiseAmt;
+        by += nY * noiseAmt;
+        
+        float f = rayGlowThick * t * (1.0 - t) + 0.15;
+        if (f > 1.0) f = 1.0;
+        
+        int dr = int(float(r) * f);
+        int dg = int(float(g) * f);
+        int db = int(float(b) * f);
+        
+        TexturedBeamPoint(bx, by, f * rayGlowThick, t, RGB(dr, dg, db));
+        
+       /* if (i % 2 != 0)// == drawSegs)
+        {
+            CQuad q;
+            FillSpriteQuad(&q, tazer_lightningGlowSprite->Index, 0, 0);
+            TransformQuad(&q, 0, 0.4, 0.4, bx, by);
+            q.blend = 1;
+            for (int k = 0; k < 4; k++) q.v[k].color = RGB(dr, dg, db);
+            AddSpriteQ(9.9, &q, tazer_lightningGlowSprite->Index, 0, 64);
+        }*/
+    }
+    
+    EndTexturedBeam();
+    
+    if (reachProgress >= 1.0)
+        hasReachTarget = false;
+} 
+
+void CEffectManager::FillTrail()
+{     
+    if (managerState == 1 && effectType != 5) return;
+    if (trailAmount > 1200) trailAmount = 0; 
+      
+    if (targetObj!=NullObj && absFltn(targetObj->SpX) < 0.15 && absFltn(targetObj->SpY) < 0.15)  return;
+    
+    if (trailAmount > 0)
+    {
+        float dx = trailPastX[trailAmount - 1] - lastKnownX;
+        float dy = trailPastY[trailAmount - 1] - lastKnownY;
+    
+        // Skip if position hasn't moved significantly
+        if ((dx * dx + dy * dy) < 0.01) return; 
+    }
+    
+    trailPastX[trailAmount] = lastKnownX;  
+    trailPastY[trailAmount] = lastKnownY;
+    trailAmount++;    
+    if (trailAmount > trailMaxL)
+    {
+        DetractTrail();
+    }
+}
+
+void CEffectManager::DetractTrail()
+{
+    if (trailAmount == 0) 
+    {
+        trailSnapped = true;
+        return;
+    }
+    for (int i = 0; i < trailAmount - 1; i++)
+    {
+            trailPastX[i] = trailPastX[i + 1];
+            trailPastY[i] = trailPastY[i + 1];
+    }
+    trailAmount--; 
+} 
+
+void CEffectManager::InsertInTrail(float x, float y)
+{     
+    if (managerState == 1 && effectType != 5) return;
+    if (trailAmount > 1200) trailAmount = 0; 
+      
+    trailPastX[trailAmount] = x;  
+    trailPastY[trailAmount] = y;
+    trailAmount++;    
+    if (trailAmount > trailMaxL)
+    {
+        DetractTrail();
+    }
+}
+
+float CEffectManager::TrailConsistent(int i)
+{
+    float t = float(i) / float(trailAmount);
+    if (t > 1.0) t = 1.0;
+    if (t < 0.0) t = 0.0;
+
+    // Dome curve: 0 at head/tail, peak in the middle
+    // This is intentionally kept separate from thickness scaling
+    float f = 4.0 * t * (1.0 - t) + 0.15;
+    if (f > 1.0) f = 1.0;
+
+    return f;
+}
+
+float CEffectManager::TrailEnvelope(int i)
+{
+    float t = float(i) / float(trailAmount - 1);
+    if (t > 1.0) t = 1.0;
+    if (t < 0.0) t = 0.0;
+
+    // Parabolic dome curve: peak in middle, lower at ends
+    float f = 4.0 * t * (1.0 - t) + 0.15;
+    if (f > 1.0) f = 1.0;
+
+    return f;
+}
+
+float absFltn(float f)
+{
+  if (f < 0.0) return -f;
+  else
+  return f;
+}
+
+void CEffectManager::DrawTrail()
+{      //  trailProgressive = true;     
+    StartTexturedBeam(this, ZPlane, tazer_lightningBeamSprite->Index, 0.0, 1);
+    for (local i = 0; i < trailAmount; i++)
+    {
+        float t = float(i + 1) / float(trailAmount + 1);
+        float f;
+
+        if (trailWavy)
+        {
+            f = TrailEnvelope(i);
+        }       
+        else if (midThickEdgeThin)
+        {                      
+            f = TrailConsistent(i);
+        }
+        else
+        {
+            f = t; 
+            if (f < 0.1) f = 0.1;
+        } 
+        if (StraightTrail)
+        {
+           t = rayThickness;
+           f = t;
+        }
+        
+        int dr = int(float(r) * f);
+        int dg = int(float(g) * f);
+        int db = int(float(b) * f);
+
+        TexturedBeamPoint(trailPastX[i], trailPastY[i], f * rayThickness, t, RGB(dr, dg, db));
+    }
+
+    EndTexturedBeam();
+
+    // --- Glow pass — same math, different sprite/thickness scale ---
+    StartTexturedBeam(this, ZPlane, beam_glowSprite->Index, 0.0, 1);
+
+    for (local i = 0; i < trailAmount; i++)
+    {
+        float t = float(i + 1) / float(trailAmount + 1);
+        float f;
+        
+        if (trailWavy)
+        {
+            // Original wavy/thin-reversal look, but properly clamped this time
+            f = TrailEnvelope(i);
+        }   
+        else if (midThickEdgeThin)
+        {                      
+            f = TrailConsistent(i);
+        }
+        else
+        {
+            f = t; 
+            if (f < 0.1) f = 0.1;
+        }
+        if (StraightTrail)
+        {
+           t = rayGlowThick;
+           f = t;
+        }
+
+        int dr = int(float(r) * f);
+        int dg = int(float(g) * f);
+        int db = int(float(b) * f);
+
+        TexturedBeamPoint(trailPastX[i], trailPastY[i], f * rayGlowThick, t, RGB(dr, dg, db));
+    }
+
+    EndTexturedBeam();
+}

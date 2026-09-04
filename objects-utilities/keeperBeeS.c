@@ -181,6 +181,8 @@ CBee::CBee(CObject *parent, CShootDesc *Sdesc, CWorm *launcher, int team)
  SpY = RandomFloat (-5.5,-1.2);  
  gravity = GravityFactor;   
  
+ turnStopped = false;
+ 
  StartPointX = PosX;  
  StartPointY = PosY-22.2;    //The bee will 'circle' this path forever.     
  ArrivePointX = PosX;
@@ -220,8 +222,9 @@ CBee::CBee(CObject *parent, CShootDesc *Sdesc, CWorm *launcher, int team)
  bonk = 0;
  
  softSpin = true; 
- 
- linkedEffect = CEffectManager(NullObj);
+                                             
+ linkedEffect = CEffectManager(NullObj);   
+// linkedEffect->SetTrail(10,2,0);
 }
 
 /////////////////////////////////--CODE--/////////////////////////////////
@@ -229,12 +232,35 @@ CBee::CBee(CObject *parent, CShootDesc *Sdesc, CWorm *launcher, int team)
 void CBee::Taze()
 {
    supercharged = true;
+   if (linkedEffect != NullObj) linkedEffect->Free( true );
    linkedEffect = attachPulseEffect(this, 11.0, 90, 130, 190);
    linkedEffect->SetBeamThickness(2.0);        
    linkedEffect->SetBeamGlowThickness( 12.0);
    linkedEffect->SetNoise(3.1);
    linkedEffect->SetVanishSpeedClamped(0.65);   
-   linkedEffect->glow = true;
+   linkedEffect->glow = false;
+   linkedEffect->SetTrail( 15, 2, 0);
+   
+   if (#ELECTRIC_PLUGIN)TazeMine();
+   
+   /*linkedEffect->customTrail = true;
+   linkedEffect->InsertInTrail( 0, 0) ;  
+   linkedEffect->InsertInTrail( 500, 20) ;  
+   linkedEffect->InsertInTrail( 300, -100) ;*/
+}
+
+void CBee::UnTaze()
+{
+   linkedEffect->Free(true);
+   supercharged = false;
+   spin = true;
+   spinN = -40;
+   
+   if (#ELECTRIC_PLUGIN)
+   {
+      if (linkedEffect1 != NullObj)linkedEffect1->Free(true);     
+      if (linkedEffect2 != NullObj)linkedEffect2->Free(true); 
+   }
 }
 
 void CBee::beeDraw()
@@ -255,7 +281,7 @@ void CBee::beeDraw()
     else if (supercharged)
     {
      hascolormod = true;
-     SetColorMod(RGB(220,235,255),14);
+     SetColorMod(RGB(200,230,255),14);
     }
 
     if (!faceRight)
@@ -273,6 +299,8 @@ void CBee::beeDraw()
     AddSpriteEx(ZPlane + 0.03, baseX, baseY, renderFlags + beeSpriteBase, bframe, renderAngle, 0.93);
 
     if(hascolormod) ClearColorMod();
+    
+    if (supercharged) drawGlowCircle(PosX, PosY, 13.2, 0.4, RGB(50,90,160));
 }
 
 bool CBee::IsThereLandThere(fixed trgtX, fixed trgtY, bool targeting)
@@ -280,8 +308,9 @@ bool CBee::IsThereLandThere(fixed trgtX, fixed trgtY, bool targeting)
     if (this == NullObj || FreeMe) return false;
     
     int hitX; int hitY;
+    int flags = CMASK_TERRAIN;
     int b = 6; // buffer, square of 12px. Would be better if TraceLine allowed float of 6.5.
-    
+    if (!targeting) flags = -1;
     // Offset target upward
     fixed targetYOffset = trgtY - 3;  // Tune this value
     
@@ -473,7 +502,8 @@ void CBee::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
     { cancelMovement(); } //Freeze
     //if (FreeMe){ Free(true); return; }
     if (Dead) deadframes++; 
-    if (Root->IsTimerActive() == false) timerInactiveFrames++;
+    if (Root->IsTimerActive() == false) { timerInactiveFrames++; if (timerInactiveFrames > 145) turnStopped = true; }
+    else if (Root->IsTimerActive() == true && turnStopped && beeTarget == NullObj ) { spin = true; spinN = 25; turnStopped = false; }
     
     if  (timerInactiveFrames > 200) { stopMe = true; }
      
@@ -619,7 +649,8 @@ void CBee::cancelSpin()
 }
 
 void CBee::HardReset()
-{                         
+{       
+        cancelSpin();                  
         cancelRotation = false;
         stopMe=false;
         stopBee = false;
@@ -639,7 +670,7 @@ void CBee::HardReset()
         //delayTally = 0;
         //homingDuration = 0;
       
-        cancelSpin();
+       // cancelSpin();
 }
 
 void CBee::RoamAround()
@@ -707,6 +738,12 @@ void CBee::isTargetTeammate()
         }
     }
 }
+
+void CBee::Collide(CGObject* Obj,int type)
+{
+ bonk++;
+ super;
+}
  
 void CBee::BeeThink()
 {      
@@ -724,8 +761,14 @@ void CBee::BeeThink()
     }
     
     if (gframe % 10 == 0 && bonk > 0) bonk--;
-    if (bonk == 10) HardReset();
-    
+    if (bonk >= 10) 
+    {
+        spin = true;
+        spinN = 35;             
+        ArrivePointX = PosX;
+        ArrivePointY = PosY;
+        bonk = 0;
+    }
     if ((PosX < 20 ) && (PosY < -300))  Free(true);
     
     float distToSpawn = sqrt((PosX - StartPointX) * (PosX - StartPointX) + (PosY - StartPointY) * (PosY - StartPointY));
@@ -777,9 +820,9 @@ void CBee::BeeThink()
     
     if (delayTally > 180) delayTally = 0;
         
-    if (delayTally >= 149 && Root->IsTimerActive() == true)  //hard reset because i did something wrong and cant bother to look into it (i did the bee months ago)
+    if (delayTally >= 155 && Root->IsTimerActive() == true)  //hard reset because i did something wrong and cant bother to look into it (i did the bee months ago)
     {                                                                                   
-         if (!IsThereADeadWormRightNOWOutThere() && beeTarget!=NullObj){ doSoftSpin(); cancelSpin(); HardReset(); }
+         if (!IsThereADeadWormRightNOWOutThere() && beeTarget!=NullObj){ spin = true; spinN = 29; }
     }    
     
     if (spin || softSpin)
@@ -799,7 +842,7 @@ void CBee::BeeThink()
         //if ( abs(abs(StartPointX + StartPointY) - abs(PosX + PosY)) > 500 )      didBeeStart = true;
         if ( lookoutCooldown <=0 ) beeTarget = FindClosestEnemy(this); //hopefully it'll replace to NullObj if it isn't visible
         homingCD--;    
-        if ( distToSpawn > 670.0 && beeTarget == NullObj) 
+        if ( distToSpawn > 650.0 && beeTarget == NullObj) 
         {
              didBeeStart = false;
         }  
@@ -836,15 +879,15 @@ void CBee::BeeThink()
         
         if ( distToSpawn > 420.0 ) 
         {
-             spin=true;
              lookoutCooldown = 150;
            
              RoamAround();    
            
-             WhereTheFuckAmI += 50;
+             WhereTheFuckAmI += 50;       
+             spin=true;
              return;
         }
-        if (distToTarg > 310.0) 
+        if (distToTarg > 470.0) 
         {
              beeTarget = CWorm(NullObj);
              beehomeActive = false;
@@ -858,7 +901,7 @@ void CBee::BeeThink()
         {     
 	     FuckingDie();    
         }
-        if (distToTarg >= 26.0 && distToTarg < 37.0 && homingDuration>36) //Eh, good enough  
+        if (distToTarg >= 26.0 && distToTarg < 38.0 && homingDuration>36) //Eh, good enough  
         {    
 	     FuckingDie();   
         }
@@ -951,8 +994,8 @@ void CBee::beeRoam()
             CalculatePlace(1.95, &arrivex, &arrivey); 
             if (IsThereLandThere(outRangeX, outRangeY, false) == false)
             {      
-                 ArrivePointX = outRangeX;
-                 ArrivePointY = outRangeY;
+                 ArrivePointX = arrivex;
+                 ArrivePointY = arrivey;
                  didBeeStart = true;   
                  GravityFactor = gravity;
                  seekCooldown = RandomInt(25,80); // wait a bit before picking a new spot          
@@ -993,10 +1036,10 @@ void CBee::HomeToTarget(CWorm* targttt)
                     dirY = dirY / distanceToTarget;
                   }
                   
-                  float missileSpeed = RandomFloat(4.910, 8.99);   // How fast the missile tries to fly.
-                  float homingStrength = RandomFloat(0.29, 0.349); // How sharply it can turn (0.0 to 1.0)
+                  float missileSpeed = 7.0;   // How fast the missile tries to fly.
+                  float homingStrength = 0.305; // How sharply it can turn (0.0 to 1.0)
                   
-                  if (supercharged) missileSpeed = missileSpeed * 1.5;
+                  if (supercharged) missileSpeed = missileSpeed * 1.75;
 
                   // 4. Calculate the ideal velocity (direction * speed).
                   float requiredSpX = dirX * missileSpeed;
@@ -1041,12 +1084,13 @@ void CBee::HomeToPlace(float PointX, float PointY)    //generalistic function
                     dirX = dirX / distanceToTarget;
                     dirY = dirY / distanceToTarget;
                   }
-                  float missileSpeed = RandomFloat(1.0, 1.85);   // How fast the missile tries to fly.
-                  float homingStrength = RandomFloat(0.33, 0.52); // How sharply it can turn (0.0 to 1.0)
+                  float missileSpeed = 1.455;   // How fast the missile tries to fly.
+                  float homingStrength = 0.425; // How sharply it can turn (0.0 to 1.0)
                   float requiredSpX = dirX * missileSpeed;
                   float requiredSpY = dirY * missileSpeed;
                   SpX += (requiredSpX - SpX) * homingStrength;
                   SpY += (requiredSpY - SpY) * homingStrength;
+                  if (supercharged){  missileSpeed+=10.0; homingStrength+=0.25; }
                   homingCDRoam = 1; // Cooldown before the next minor adjustment. 
                 }
                 else if (homingCDRoam > 0)

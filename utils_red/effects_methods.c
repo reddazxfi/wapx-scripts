@@ -1,5 +1,4 @@
 require weapon_bowlingball;
-
 CEffectManager * createElectricImpact(CGObject * target, float x, float y, float radius)
 {
         CEffectManager* zapFX = new CEffectManager(NullObj, x, y, 4, 30, radius, 0.45, 160, 220, 255) ;
@@ -32,30 +31,34 @@ CEffectManager * attachPulseEffect(CGObject * target, float radius, int r, int g
      return NullObj;
 }
 
-void CMissile::drawSparkEle(fixed Posx, fixed Posy, fixed zPlane, float Rotation)   //from bowling ball
-{
-		CQuad q;
-	//	int j;
-	
-		// Glow effect 
-	       // GlowSize = RandomFloat(0.3,0.4);
-	//	FillSpriteQuad(&q, bowlingballglowSprite->Index, 0, 0);
-	//	TransformQuad(&q, 0, GlowSize, GlowSize, Posx, Posy);
-	//	q.blend = 1;
-	//	for(j=0 ; j<4 ; j+=1) q.v[j].color = RGB(80,110,128);
-		
-	//	for(j=0 ; j<3 ; j+=1)
-	//		AddSpriteQ(zPlane+0.02, &q, bowlingballglowSprite->Index, 0, 64);
-		
+void drawSparkEle(fixed Posx, fixed Posy, fixed zPlane, float Rotation, float size)   //from bowling ball
+{		                                                                                                
 		if(gSparkCycle <= 1.0)
-		{
-			// Spark effect
+		{      
+		        CQuad q;
+			// Spark effect                                                               
 			FillSpriteQuad(&q, bowlingballsparkSprite->Index, 0, 0);
-			TransformQuad(&q, Rotation, 1, 1, Posx, Posy);
+			TransformQuad(&q, Rotation, q.v.tx * size, q.v.ty * size, Posx, Posy);
 			q.blend = 1;
 			for(local j=0 ; j<4 ; j+=1) q.v[j].color = RGB(255,255,255);
-			AddSpriteQ(zPlane, &q, bowlingballsparkSprite->Index, gSparkCycle, 64);
+			Root->AddSpriteQ(zPlane, &q, bowlingballsparkSprite->Index, gSparkCycle, 64);
 		}
+}
+
+void drawGlowCircle(fixed x, fixed y, fixed zplane, float size int rgb)
+{
+		CQuad q;
+		local j;
+	
+		//Glow effect 
+	        GlowSize = size;
+		FillSpriteQuad(&q, bowlingballglowSprite->Index, 0, 0);
+		TransformQuad(&q, 0, GlowSize, GlowSize, x, y);
+		q.blend = 1;
+		for(j=0 ; j<4 ; j+=1) q.v[j].color = rgb;
+		
+		for(j=0 ; j<3 ; j+=1)
+			Root->AddSpriteQ(zplane, &q, bowlingballglowSprite->Index, 0, 64);
 }
 
 void drawEleTrail(fixed PosX, fixed PosY)
@@ -167,6 +170,16 @@ CEffectManager* createEffectExplosion(fixed ePosX, fixed ePosY, float thickness,
         }
         }
         return newEffect;
+}
+
+CEffectManager *CEffectManager::CreateRainbowExplosion(fixed ePosX, fixed ePosY, float thickness, float radius, float noise, int duration, float fadeOut, float fadeIn)
+{
+local expEff = createEffectExplosion( ePosX,  ePosY,  thickness,  radius,  noise,  255,  255,  255,  false,  duration,  fadeOut,  fadeIn) ;
+expEff->isRainbow = true;
+
+expEff->rainbowSpeed = 0.15;        
+
+return expEff;
 }
 
 void effects::FirstFrame()

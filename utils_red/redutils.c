@@ -86,6 +86,50 @@ float chooseBetweenFloat(float a, float b, float c, float d, float e, float f, i
     else             return f;
 };
 
+override void CTurnGame::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
+{
+    super;
+    if (Type == M_FRAME)
+    {
+        RainbowGlobalHue += RainbowSpeed;
+        if (RainbowGlobalHue > 1.0) RainbowGlobalHue -= 1.0;
+        if (gframe == 3) { SecondFrame(); };                       
+    }
+}
+
+void CTurnGame::SecondFrame() {RainbowGlobalHue = 0.009; }
+
+// Fast, smooth 3-phase sine rainbow (No black dips, continuous curves)
+int FastSmoothRainbow(float phase)
+{
+    // Convert 0.0..1.0 range into radians (2 * PI)
+    float rad = phase * 6.2831853; 
+
+    // Center at 180, amplitude 75 -> range [105 .. 255]
+    // Phase offsets: Red = 0, Green = 120 deg (2.094 rad), Blue = 240 deg (4.188 rad)
+    int rr = int(180.0 + 75.0 * sin(rad));
+    int gg = int(180.0 + 75.0 * sin(rad + 2.0943951));
+    int bb = int(180.0 + 75.0 * sin(rad + 4.1887902));
+
+    return RGB(rr, gg, bb);
+}
+
+int RRGB(float phaseOffset)
+{
+    return FastSmoothRainbow(RainbowGlobalHue + phaseOffset);
+}
+
+// FIX: Changed int offset to float offset
+void SetRainbowMod(float offset, int blendType)
+{
+    SetColorMod(RRGB(offset), blendType);
+}
+
+void SetRainbowMod(int offset, int blendType)
+{
+   SetColorMod(RRGB(offset), blendType);
+};
+
 void r_g_b_Brightness(int amount, int *r, int *g, int *b)
 {
      *r += amount;
@@ -97,7 +141,7 @@ void r_g_b_Brightness(int amount, int *r, int *g, int *b)
      if (*r >255) *r = 255;   
      if (*g >255) *g = 255;
      if (*b >255) *b = 255;
-}
+};
 
 int RGB_Brightness(int amount, int RgB)
 {
@@ -107,7 +151,7 @@ int RGB_Brightness(int amount, int RgB)
      r_g_b_Brightness(amount, &r, &g, &b);
      
      return RGB(r,g,b);
-} 
+}; 
 
 int ARGB_Brightness(int amount, int aRGB)
 {
@@ -117,7 +161,7 @@ int ARGB_Brightness(int amount, int aRGB)
      r_g_b_Brightness(amount, &r, &g, &b);
      
      return ARGB(a,r,g,b);
-} 
+}; 
 
 void mult_r_g_b(float amount, int *r, int *g, int *b) 
 {
@@ -130,7 +174,7 @@ void mult_r_g_b(float amount, int *r, int *g, int *b)
      if (*r >255) *r = 255;   
      if (*g >255) *g = 255;
      if (*b >255) *b = 255;
-} 
+}; 
 
 int mult_RGB(float amount, int RgB) 
 {
@@ -140,7 +184,7 @@ int mult_RGB(float amount, int RgB)
      mult_r_g_b(amount, &r, &g, &b); 
      
      return RGB(r,g,b);
-} 
+}; 
 
 void stripRGB(int RGB, int *r, int *g, int *b)
 {
@@ -150,7 +194,7 @@ void stripRGB(int RGB, int *r, int *g, int *b)
      *r = (pRGB & 16711680)   >> 16; // Red channel   (0x00FF0000)
      *g = (pRGB & 65280)      >>  8; // Green channel (0x00FF00)
      *b =  pRGB               & 255; // Blue channel  (0x00FF)
-}                                                                                                                          
+};                                                                                                                          
 
 void stripARGB(int ARGB, int* a, int * r, int *g, int *b)
 {
@@ -164,10 +208,10 @@ void stripARGB(int ARGB, int* a, int * r, int *g, int *b)
      {
          *a = *a + 128; // Restores the top bit if it was set
      }
-}
+};
 
 void PlayGlobalSound(int SIndex,int UnkB,fixed UnkC,fixed Pan)
-{
+{    
      local playedSound = false;
      for (i = 0; i < Env->Objs.Count; i++)
      {
@@ -187,9 +231,9 @@ void PlayGlobalSound(int SIndex,int UnkB,fixed UnkC,fixed Pan)
                }
           } 
           continue;
-     }
-    // Root->PlaySound(SIndex, UnkB, UnkC, Pan); 
-}
+     }; if (!playedSound)
+     Root->PlaySound(SIndex, UnkB, UnkC, Pan); 
+};
 
 float FireAngleToRadians(float FireAngleF, int TurnsidE) 
 {
@@ -481,9 +525,13 @@ bool IsTooCloseToCWorms(CGObject * sender, float x, float y, float minDist)
 CTraceRes * spawnCheckRes;
 CTraceArcRes * CheckArcRes;
 CColMask * ColMask3s ;
+
 int CMASK_ALL;
 int CMASK_EVERYTHING;
-int CMASK_ALL_WORMS;
+int CMASK_ALL_WORMS;     
+float RainbowGlobalHue;
+float RainbowSpeed;
+
 string NullString;
 
 void redutils::InitGraphic()
@@ -491,12 +539,15 @@ void redutils::InitGraphic()
     ColMask3s = new CColMask(3,3,MakeCircleMask(3)); 
 };
 void redutils::Init()
-{
+{    
+    RainbowGlobalHue = 0.0;
+    RainbowSpeed     = 0.009;   // 0.003 = full cycle every 330 frames
+    
     CMASK_ALL = -1;            
     CMASK_EVERYTHING = -1;
     CMASK_ALL_WORMS = 4 + 8 + 16 + 32 + 64 + 256 ;   
     NullString = "Null";  
     
     spawnCheckRes = new CTraceRes();  //Deleting and creating stuff mid frame is expensive, just let it be. Works well for several objs using same res at the same time (for now)
-    CheckArcRes = new CTraceArcRes(); //  
+    CheckArcRes   = new CTraceArcRes(); //  
 }; 

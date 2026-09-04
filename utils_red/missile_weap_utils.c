@@ -43,7 +43,7 @@ override void CMissile::CMissile(CObject* parent,CWeaponLaunch* ldata,CShootDesc
  
   super;  
   
-  WeaponName = "Null";  
+  WeaponName = NullString;  
   
   ExpOnImpact = MissileExplodesOnImpact(&this->launchdata);
   CWeaponLaunch* ldata2 = new CWeaponLaunch; 
@@ -168,7 +168,6 @@ void CMissile::HomeAfter(float homeX, float homeY, int frames, float speed, floa
 
 void CMissile::doEffectExp(fixed x, fixed y)
 {
-    if (cusExpEff){
     // Scale duration UP with damage.
     int scaledDuration = 10 + int(launchdata.explosion.damage * 0.125);
     
@@ -183,18 +182,17 @@ void CMissile::doEffectExp(fixed x, fixed y)
     CEffectManager* wowExplosion = createEffectExplosion(x, y, expThicc, launchdata.explosion.damage, expNoise, r, g, b, false, scaledDuration, expVanish, outVanish);
         wowExplosion->numSegs = int(launchdata.explosion.damage * 0.40) + 5;
         wowExplosion->shouldExplode = expCircle;
-        wowExplosion->shouldEllipse = expEllipse;  }
-        if (!customExplosion) return;
-        else if (customExplosion)  {  do_custom_explosion(this, expFlags, x, y, expDmg, expPush, expDestroyR, expShouldDestroy, expParticles,expSound, expTaze, expSoundNum); }
+        wowExplosion->shouldEllipse = expEllipse;  
 }
 
 override void CMissile::DoExplosion(fixed x,fixed y,int PushPower,int Damage,int unkB,int Team)
 {   
-    if (!customExplosion) super;
-    if (cusExpEff || customExplosion)
+    if (cusExpEff)
     {
         doEffectExp(x,y);
-    }           
+    }  
+    if (!customExplosion) super; 
+    else {  do_custom_explosion(this, expFlags, x, y, expDmg, expPush, expDestroyR, expShouldDestroy, expParticles,expSound, expTaze, expSoundNum); }        
 } 
 
 void CMissile::ApplyExplosionEffect(float thickness, int radius, int Rgb, bool circle, bool ellipse, float vanish)
