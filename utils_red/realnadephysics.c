@@ -117,74 +117,62 @@ void CMissile::ActivateBouncePhysics(CObject* parent, CWeaponLaunch* ldata, CSho
 }
 
 override void CMissile::Collide(CGObject* Obj, int type)
-{
-    super; 
-
-    if (NewBounce && (launchdata.action == WAction_Dig || launchdata.action == WAction_Roam || launchdata.action == WAction_Homing))
-    {
-        NewBounce = false;
-    }
-
+{         
+    if (NewBounce && (launchdata.action == WAction_Dig || launchdata.action ==  WAction_Roam || launchdata.action == WAction_Homing)) { NewBounce = false;  if (reflect!=NullObj) delete reflect; }
+    
     if (!NewBounce)
     {
-        skipRest = true;    
-        bounceCounter++;
-        return;
+       super;
+       return;
+    }     
+    if (attemptedBounces>=1000 || isStatic)
+    {    
+      super;   //Engine behavior then replace its calc with my thing   
+      attemptedBounces-=1.0;
+      if (!doExplosionOnTouch) bounceCounter+=1;   
+      else queueExplosion = true;
+      isStatic = true;   //Give it a second chance by bouncing originally some times
+      staticFrames = 20;
+      return;
     }
-
-    if (!skipRest && (attemptedBounces >= 1000 || isStatic))
-    {
-        super;   //Engine behavior then replace its calc with my thing   
-        attemptedBounces -= 1.0;  
-        bounceCounter++;
-        if (!doExplosionOnTouch) bounceCounter += 1;
-        else queueExplosion = true;     //Exploding this frame will remove slope to detect (duh)
-        isStatic = true;       //Give it a second chance by bouncing originally some times
-        staticFrames = 20;
-        skipRest = true;
+    if (Obj!=NullObj && bouncesInFrame == 0) //Triggering explosion once this frame
+    {      
+       super;                
+       if (!doExplosionOnTouch) bounceCounter++; //Increment this only on explosions 
+       if (bounceCounter == 55) {nadeRestitution-=0.12;}  //only once  
+       if (bounceCounter == 105) {nadeRestitution-=0.10;}  //okay maybe twice
+       if (nadeRestitution < 0.10) nadeRestitution = 0.10; // but not thrice
+       if (doExplosionOnTouch)
+       {
+          queueExplosion = true;   //Exploding this frame will remove slope to detect (duh)
+       }
+       bouncesInFrame = 1;
     }
-
-    if (!skipRest)
+    if (Obj!=NullObj && !isStatic && attemptedBounces<1000 && failCount<3)    
     {
-        if (Obj != NullObj && bouncesInFrame == 0)  //Triggering explosion once this frame
+        attemptedBounces++;
+        if ((Obj->ClType == OC_Worm || Obj->ClType == OC_OilDrum || Obj->ClType == OC_Crate || Obj->ClType == OC_Collideable) && (!isStatic || failCount<3)) 
         {
-            super;
-            bounceCounter++;    //Increment this only on explosions 
-            if (bounceCounter == 55) { nadeRestitution -= 0.12; } //only once
-            if (bounceCounter == 105) { nadeRestitution -= 0.10; }  //okay maybe twice
-            if (nadeRestitution < 0.10) nadeRestitution = 0.10;   // but not thrice
-            if (doExplosionOnTouch)
-            {
-                queueExplosion = true;
-            }
-            bouncesInFrame = 1;
+           ignoreCol = PerformObjectBounce(Obj);
+           if (reflect->Hit == false) failCount++;   
+           if (failCount <= 2)    //if it fails twice it will fail 1000 times lol
+           {  
+             bouncing = true;
+             bounceSound(1,0);        
+           }  
+           
         }
-
-        if (Obj != NullObj && !isStatic && attemptedBounces < 1000 && failCount < 3)
+        else if (Obj->ClType == OC_Landscape && (!isStatic || failCount<3)) 
         {
-            attemptedBounces++;
-            if ((Obj->ClType == OC_Worm || Obj->ClType == OC_OilDrum || Obj->ClType == OC_Crate || Obj->ClType == OC_Collideable) && (!isStatic || failCount < 3))
-            {
-                ignoreCol = PerformObjectBounce(Obj);
-                if (reflect->Hit == false) failCount++;
-                if (failCount <= 2)    //if it fails twice it will fail 1000 times lol
-                {
-                    bouncing = true;
-                    bounceSound(1, 0);
-                }
-            }
-            else if (Obj->ClType == OC_Landscape && (!isStatic || failCount < 3))
-            {
-                bool didBounce = PerformLandscapeBounce(true);
-                attemptedBounces++;
-                if (reflect->Hit == false) failCount++;
-                if (failCount <= 2)  
-                {
-                    bouncing = true;
-                    bounceSound(1, 0);
-                }
-            }
-        }
+           PerformLandscapeBounce(true);
+           attemptedBounces++;  
+           if (reflect->Hit == false) failCount++;
+           if (failCount <= 2)
+           {    
+             bouncing = true;  
+             bounceSound(1,0); 
+           }      
+        } 
     }
      // WriteToChat4(6,(itoa(bounceCounter))," bounces, " ,itoa(attemptedBounces), " attempted ones." ,false);
     // WriteToChat5(4, classtoString(Obj->ClType), " was the class, fail: ", StrCon(itoa(failCount), " times failed, that it hit it was "), BtoA(reflect->Hit), ftoa(slowframecount), false) ;  

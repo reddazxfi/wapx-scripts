@@ -94,6 +94,8 @@ CSaw::CSaw(CObject* Parent, CShootDesc* Desc, float sScale)
     spawnY = Desc->Y;
     
     super(Parent, &MParams, Desc, false, 0);
+    PosX = spawnX;
+    PosY = spawnY;
     ClType = EObjectClass(99);
     
     SawCollisionUnit = sawScale * (200/2) ; //radians
@@ -137,7 +139,7 @@ void CSaw::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
  {
     Draw(); 
  }
- if (Type == M_GUNEXP) return;
+ if (Type == M_GUNEXP)  sawHP-= MData->params[5];
  if(Type == M_EXPLOSION && isDestructible)
  {
       TakeExplosionDamage(MData->fparams[1], MData->fparams[2], MData->params[4]); 
@@ -547,7 +549,8 @@ void CSaw::CSawCollission(CWorm * w)
         
             DoSound();
               
-            if(w->ObjState!=WS_DRILLING && w->ObjState!=WS_FROZEN) timesCollided = timesCollided + 1;   
+            //if(w->ObjState!=WS_DRILLING && w->ObjState!=WS_FROZEN) 
+            timesCollided = timesCollided + 1;   
             
             if (supercharged && eleFuel > 1) eleFuel--;
         }
@@ -610,7 +613,7 @@ int CSaw::ApplySawKnockback(CGObject* worm, fixed sawX, fixed sawY, float sawSiz
     stopRotation = false;
     if (worm == NullObj) return 0;
     
-    sawRotation += rotationFactor * 2.0; //xD
+    sawRotation += rotationFactor * 3.0; //xD
     
     if (supercharged) sawSizeFactor = sawSizeFactor + (sawSizeFactor * 0.77);
     // Directional Math (Away from Saw Center)
@@ -630,7 +633,7 @@ int CSaw::ApplySawKnockback(CGObject* worm, fixed sawX, fixed sawY, float sawSiz
     // Return Force (Conservation of Energy)
     // Takes 75% of incoming speed and adds a gentle base push
     float basePush = 1.5 + (sawSizeFactor * 1.5); 
-    if (supercharged) basePush = basePush * 1.55;
+    if (supercharged) basePush = basePush * 2.0;
     float bounceStrength = basePush + (speedIn * 0.75); 
     // Dot Product Reduction
     float dot = vx * nx + vy * ny;
@@ -651,7 +654,7 @@ int CSaw::ApplySawKnockback(CGObject* worm, fixed sawX, fixed sawY, float sawSiz
 
     lowerLimit = 4.0;  
     
-    if (supercharged) lowerLimit = 5.5;
+    if (supercharged) lowerLimit = 7.0;
 
     // Enforce a Gradual Minimum
     // If the final speed is too weak, scale it up to 4.0       
@@ -672,9 +675,9 @@ int CSaw::ApplySawKnockback(CGObject* worm, fixed sawX, fixed sawY, float sawSiz
     maxAllowed = 13.9;
     
     if (worm == NullObj) return 0;
-    if (worm is CWorm == false) maxAllowed = 17.5;   
+    if (worm is CWorm == false) maxAllowed = 17.0;   
     
-    if (supercharged) maxAllowed += 3.0;
+    if (supercharged) maxAllowed += 5.5;
     
     if (total > maxAllowed)
     {

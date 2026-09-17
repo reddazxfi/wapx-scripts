@@ -1,14 +1,4 @@
 //Homing, name return, weap cmissile check, exp check.
-
-string fuckstring;
-int stringfucker[1];
-
-string stringintP(int targ)
-{
-   stringfucker[-1*1] = targ;
-   return fuckstring;
-};
-
 CWeapon * gu_cweap; 
 
 void ApplyConstantSpeed(CGObject *sender, float speedcap)
@@ -186,13 +176,13 @@ void CMissile::doEffectExp(fixed x, fixed y)
 }
 
 override void CMissile::DoExplosion(fixed x,fixed y,int PushPower,int Damage,int unkB,int Team)
-{   
+{  
+    if (!customExplosion) super;  
     if (cusExpEff)
     {
         doEffectExp(x,y);
     }  
-    if (!customExplosion) super; 
-    else {  do_custom_explosion(this, expFlags, x, y, expDmg, expPush, expDestroyR, expShouldDestroy, expParticles,expSound, expTaze, expSoundNum); }        
+    if (customExplosion) {  do_custom_explosion(this, expFlags, x, y, expDmg, expPush, expDestroyR, expShouldDestroy, expParticles, expSound, expTaze, expSoundNum); }        
 } 
 
 void CMissile::ApplyExplosionEffect(float thickness, int radius, int Rgb, bool circle, bool ellipse, float vanish)

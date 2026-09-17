@@ -10,7 +10,7 @@ void CMissile::applyCustomExplosionParams(int expFlags1, int expDmg1, int expPus
  expShouldDestroy = expShouldDestroy1;
  expParticles     = expParticles1;
  expSound         = expSound1;
- expTaze          = expTaze;
+ expTaze          = expTaze1;
  expSoundNum      = expSoundNum1;
 }
 
@@ -18,40 +18,50 @@ int do_custom_explosion(CGObject * sender, int flags, fixed x, fixed y, int dmg,
 {      
       if (defSound) 
       {
-            Root->PlaySound(RandomInt(69,71), 5, 1.0, 1.0);
+            PlayGlobalSound(RandomInt(69,71), 5, 1.0, 1.0);
       }
       else   
-            Root->PlaySound(esound, 5, 1.0, 1.0);
+            PlayGlobalSound(esound, 5, 1.0, 1.0);
        
       ePosX = x;
       ePosY = y;
       local targetsHit = 0; 
-      local r = (dmg + 2) * 2;
-      local tier = 0;
+      local radiusss = (dmg + 2) * 2;
+      local tier = 0;  
                   
-      if (dmg > 0 && r > 4.01)
+      if (dmg > 0 && radiusss > 0)
       {
+      if (#Flowers)
+      {
+            if(FlowerMan!=NullObj)
+            {
+                  local fdCheck = (radiusss - 2) * 0.75;
+                  if (destroyRadius > radiusss)
+                        fdCheck = destroyRadius;
+                  if (fdCheck > 0)      
+                  FlowerMan->CheckFlowerDamage( x, y, fdCheck); 
+            }
+      }
       for (local i = 0; i < Env->Objs.Count; i++)
       {
             local obj = CGObject(Env->Objs.Objs[i]);
             if (obj == NullObj) continue;
             if (obj is PxDeadWorm == true) continue;
             
-            if (obj != NullObj && ((flags & obj->MaskIndex) == 0 || flags == -1))
+            if (obj != NullObj && (flags == -1 || MatchCollisionGroup(obj, flags) ) )
             {
                   float oPosX = float(obj->PosX);
                   float oPosY = float(obj->PosY);
                   float dx = oPosX - ePosX;
                   float dy = oPosY - ePosY;     
                  
-                  local r = (dmg + 2) * 2;
                   float dist = sqrt(dx * dx + dy * dy);
 
                   // if dist > r: nothing
-                  if (dist >= r) continue;
+                  if (dist >= radiusss) continue;
 
                   // falloff = (r - dist) / r
-                  float falloff = (r - dist) / r;
+                  float falloff = (radiusss - dist) / radiusss;
             
                   // hp = damage * falloff
                   int dmgDone = int(float(dmg) * falloff);
@@ -80,7 +90,16 @@ int do_custom_explosion(CGObject * sender, int flags, fixed x, fixed y, int dmg,
                   msg.fparams[4] = pushY;
                   msg.params[5]  = dmgDone;
                   msg.params[6]  = 0;
-            
+                  if (#ELECTRIC_PLUGIN)
+                  {
+                      if (taze && obj->ClType == OC_Mine)
+                      {
+                         amine = CMine(obj);
+                         amine->TazeMine();
+                         amine->linkedEffect2->SetTargetDynamic(ePosX,ePosY, 2,0.079, RandomFloat(-5.0,5.0));
+             
+                      }
+                  }
                   if (obj is CWorm == true)  
                   {
                         local worm = CWorm(obj);
@@ -768,7 +787,7 @@ void CFlare::Message(CObject* sender, EMType Type, int MSize, CMessageData* MDat
     if (Type == M_FRAME)
     {
         if (fdead) { Free(true); return; }
-        if (PosY > GS->LevelSY){ PlayLocalSound(55,5.0,1.0,1.0); fdead = true;}// this.PlaySound( SIndex, UnkB, UnkC, Pan)
+        if (PosY > GS->LevelSY && !fdead){ PlayLocalSound(55,5.0,1.0,1.0); fdead = true;}// this.PlaySound( SIndex, UnkB, UnkC, Pan)
         fduration--;
         if (fduration <= 0)
         {

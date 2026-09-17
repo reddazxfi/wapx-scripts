@@ -124,7 +124,7 @@ CBee::CBee(CObject *parent, CShootDesc *Sdesc, CWorm *launcher, int team)
  MParams.BlastPower = 35;  
  isMagnetic = false;
         
- SetLayerOverride(LAYER_OILDRUM);     
+ //SetLayerOverride(LAYER_OILDRUM);     
       
  super(Root->GetObject( 25, 0), &MParams, Sdesc, false, 0);  
  ColMask = new CColMask(10,10,MakeCircleMask(10));    
@@ -576,7 +576,7 @@ void CBee::HolyShitTheresAFlowerYippieee()
     if (#Flowers)
     {
         StartPointX = FlowerPosX[lookingAtFlower] ;    
-        StartPointY = FlowerPosY[lookingAtFlower] - 28.0 ;
+        StartPointY = FlowerPosY[lookingAtFlower] - (28.0) ;
     }
 }
 
@@ -761,14 +761,16 @@ void CBee::BeeThink()
     }
     
     if (gframe % 10 == 0 && bonk > 0) bonk--;
-    if (bonk >= 10) 
+    local beeBonkReset = 10;
+    if (beeTarget!=NullObj) beeBonkReset = 24; //Targets too close will never get exploded
+    if (bonk >= beeBonkReset) 
     {
         spin = true;
         spinN = 35;             
         ArrivePointX = PosX;
         ArrivePointY = PosY;
         bonk = 0;
-    }
+    }    
     if ((PosX < 20 ) && (PosY < -300))  Free(true);
     
     float distToSpawn = sqrt((PosX - StartPointX) * (PosX - StartPointX) + (PosY - StartPointY) * (PosY - StartPointY));

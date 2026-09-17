@@ -15,6 +15,8 @@ CTraceRes *FlowerRes;
 
 CFlowerManager : CObject;
 
+CFlowerManager * FlowerMan;
+
 void flowers_uwu::FirstFrame()
 {
  Flower_Empty  = 0;
@@ -55,6 +57,7 @@ int flower_offset_y(int flower)
   if      (flower == Flower_Lily || flower == Flower_Orchid)    return 11;  
   else if (flower == Flower_Tulip)                              return 7;
   else if (flower == Flower_Rose || flower == Flower_Sunflower) return 6;
+  return 0;
 };
   
 int checkFlowerType(int flower)
@@ -77,7 +80,7 @@ override void CTurnGame::Message(CObject* sender,EMType Type,int MSize,CMessageD
 super;
  if (Type == M_FRAME && gframe == 2)
  {
-    CFlowerManager * rndflowers = new CFlowerManager(Flower_Amount);
+    if (FlowerMan == NullObj) FlowerMan = new CFlowerManager(Flower_Amount);
  }
 }
 
@@ -199,7 +202,10 @@ void CFlowerManager::CheckFlowerDamage(float expX, float expY, int expDmg)
 
 void CFlowerManager::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
 {
+    if (Type==M_FRAME || Type==M_EXPLOSION || Type == M_DRAWQUEUE)  
+     
     super;
+    
     if (currentSlice < flowerQuantity)
     {
         if (Type == M_FRAME && gframe > 2)

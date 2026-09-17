@@ -2,7 +2,12 @@ require utils, utils_steps, weapon_tazer;
 
 CEffectManager :  CObject ;
 
+int matchEffectsNumb;
+CEffectManager * matchEffects[9999] ;
+
 CSprite * beam_glowSprite;  
+
+bool freeEffects;
     
 #effects
  
@@ -40,6 +45,7 @@ void px_effects::FirstFrame()
 void px_effects::InitGraphic()
 {   
     beam_glowSprite = LoadSprite(GetAttachment("beam_glow.png"),1,0);
+    freeEffects = false;
 }
 
 CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int type, int segments, float radius, float noise, int red, int green, int blue)
@@ -49,6 +55,8 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     lastKnownX = StartX;
     lastKnownY = StartY;                                             
     ownerLess  = false;
+    ManualMode = false;
+    dynamicRayTarget = *CGObject(NullObj);
     if (target == NullObj)  ownerLess = true;
 
     // --- Core Parameters & Colors ---
@@ -81,6 +89,7 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     reachedTarget  = true;
     shouldExplode  = false;
     shouldEllipse  = false;
+    shouldBeamGlow = true;
 
     // --- Animation Timers & Fade Controls ---
     explosionTimer   = 0.0; //
@@ -141,20 +150,24 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     rayGlowThick = 6.5;
     raySegments = 16;      
     rayPersists = false;
+    rayDynamic  = false;
     
     isTrail = false;
+    trailOffX = 0.0;
+    trailOffY = 0.0;
     trailWavy = false;
     StraightTrail = false;
     midThickEdgeThin = false;
-    trailPastX = new int[9999];   
-    trailPastY = new int[9999];
+    trailPastX = new float[600];   
+    trailPastY = new float[600];
     trailAmount = 0;
     trailMaxL = 30;
     treshold = 3;
     drawConventionalEffects = true;
     trailSnapped = false;
     customTrail = false;
-    
+    trailVanishSpd = 2;    
+
     //trailPastX[0] = StartX;     
     //trailPastY[0] = StartY;
 
@@ -164,16 +177,10 @@ CEffectManager::CEffectManager(CGObject* target, float StartX, float StartY, int
     
     if (effectType == 4 || effectType == 5) shouldExplode = true;   
 
-    super(Root, GS);       
-}
-
-void CEffectManager::Free(bool FreeMem)
-{
- drawConventionalEffects = false;
- trailAmount = 0;
- delete trailPastX;
- delete trailPastY;
- super;
+    super(Root, GS);   
+    
+    matchEffects[matchEffectsNumb] = this;
+    matchEffectsNumb++;    
 }
 
 void CEffectManager::editParams(int type, int segments, float radius, float noise, int red, int green, int blue, float vanishspd)
@@ -254,6 +261,7 @@ void CEffectManager::SetRainbowMode(bool enable, float speed, float startOffset)
 }
 void CEffectManager::SetTrail(int maxLength, int delayTreshold, int type)
 {
+  trailMaxL = maxLength;
   isTrail = true;
   treshold =  delayTreshold;
   if (type == 1)  midThickEdgeThin = true;
@@ -272,6 +280,35 @@ void CEffectManager::SetTarget(float fromX, float fromY, float toX, float toY, i
     curveBulge = bulge;   
     reachSpeed = speed;
 }
+void CEffectManager::SetTargetDynamic(float toX, float toY, int type, float speed, float bulge)
+{
+    reachFromX     = lastKnownX;
+    reachFromY     = lastKnownY;
+    rayDynamic     = true;
+    reachToX       = toX;
+    reachToY       = toY;
+    hasReachTarget = true;
+    reachProgress  = 0.0;    
+    curveType  = type;
+    curveBulge = bulge;   
+    reachSpeed = speed;
+}
+void CEffectManager::SyncRayToObj(CGObject * target, int type, float speed, float bulge, bool persists)
+{    
+    if (target == NullObj) return;
+    reachFromX     = lastKnownX;
+    reachFromY     = lastKnownY;
+    dynamicRayTarget = target;
+    rayDynamic     = true;
+    reachToX       = target->PosX;
+    reachToY       = target->PosY;
+    hasReachTarget = true;
+    reachProgress  = 0.0;    
+    curveType  = type;
+    curveBulge = bulge;   
+    reachSpeed = speed;
+    rayPersists = persists;         
+}
 void CEffectManager::SetTargetNoTerrain(float fromX, float fromY, float toX, float toY, int type, float speed,  float bulge)
 {
     int hitx; int hity;
@@ -286,6 +323,7 @@ void CEffectManager::SetTargetNoTerrain(float fromX, float fromY, float toX, flo
     curveBulge = bulge;
     reachSpeed = speed;
 }
+
 void CEffectManager::ClearTarget()
 {
     if (rayPersists) return;
@@ -377,7 +415,9 @@ void CEffectManager::drawGlow()
             
         AddSpriteQ(gZPlane, &q, tazer_lightningGlowSprite->Index, 0, 64);
 }
-  
+/////////////////////////////////////////////////         ///////////////////////////////////////////////////////////
+//////////////////////////////////////////////// MESSAGE ///////////////////////////////////////////////////////////  
+///////////////////////////////////////////////         ///////////////////////////////////////////////////////////   
 void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageData* MData)
 { 
     if (Type == M_DRAWQUEUE)
@@ -485,6 +525,7 @@ void CEffectManager::Message(CObject* sender, EMType Type, int MSize, CMessageDa
     }
     super;
     TryFree();
+    if (freeEffects) Free(true);
 }
 
 void CEffectManager::TryFree()
@@ -507,12 +548,24 @@ void CEffectManager::TryFree()
  
  if (Condition1 || (Condition2 && freeAfter!=0)) drawConventionalEffects = false;
  
- if (Condition1 && Condition2 && Condition3) Free(true);
+ if (Condition1 && Condition2 && Condition3)
+ {
+   Free(true);
+   //GG->WriteToChat( 7, "Effect Free'd", false);
+ }
 }
 
-void CEffectManager::Calc()//SLANG for calculator by the way.
+bool CEffectManager::IsTargetMoving()
+{
+if (targetObj == NullObj) return true;    // We already have code handling this case.
+if (absFltn(targetObj->SpX) + absFltn(targetObj->SpY) > 0.2) return true;
+
+return false;
+}
+
+void CEffectManager::Calc() //SLANG for calculator by the way.
 {    
-     if (targetObj != NullObj)
+     if (targetObj != NullObj && !ManualMode)
      {
           lastKnownX = targetObj->PosX;
           lastKnownY = targetObj->PosY;            
@@ -527,12 +580,31 @@ void CEffectManager::Calc()//SLANG for calculator by the way.
      {
           FillTrail();
      }
-     if (managerState == 1 && effectType != 5)
+     trailShouldVanish = (trailVanishSpd <= 1 || (gframe % trailVanishSpd) == 0) ;
+     if (managerState == 1 && effectType != 5 && trailShouldVanish)
      {
           DetractTrail();
      }
-     //TrackMaster();   
-     
+     if ((isTrail) && !IsTargetMoving()) DetractTrail();
+     //TrackMaster(); 
+     if (rayDynamic)
+     {
+          reachFromX = lastKnownX;
+          reachFromY = lastKnownY;
+     }
+     if (dynamicRayTarget!=NullObj && hasReachTarget)
+     {
+          reachToX = dynamicRayTarget->PosX;         
+          reachToY = dynamicRayTarget->PosY;
+          isSynced = true;
+     }
+     if (isSynced && dynamicRayTarget == NullObj)
+     {
+          ManualMode = false;
+          hasReachTarget = false;
+          ClearTarget();
+          isSynced = false;
+     }
      UpdateType4Reach();
      
      cosRot = cos(currentAngle);
@@ -541,7 +613,7 @@ void CEffectManager::Calc()//SLANG for calculator by the way.
      if (effectType == 1 || effectType == 6) currentAngle += shiftAngle;
      currentAngle = NormalizeAngle(currentAngle);
      
-     if (isLinked && targetObj != NullObj && (abs(targetObj->SpX) + abs(targetObj->SpY)) > 0) currentAngle = atan2(-targetObj->SpX, targetObj->SpY) - MATH_HALF_PI;
+     if (isLinked && targetObj != NullObj && (absFltn(targetObj->SpX) + absFltn(targetObj->SpY)) > 0.2) currentAngle = atan2(-targetObj->SpX, targetObj->SpY) - MATH_HALF_PI;
 
      // --- Unified explosion progress, driven by expLimit ---
      blastProgress = 0.0;
@@ -613,7 +685,8 @@ void CEffectManager::UpdateAndDraw()
         float texCoord;    
             
         // Pass 1: soft outer glow — always present but kept subtle
-            
+        if (shouldBeamGlow)    
+        {
         StartTexturedBeam(this, ZPlane, beam_glowSprite->Index, 0.0, 1);
         
         for (local j = 0; j <= numSegs; j++)
@@ -641,7 +714,7 @@ void CEffectManager::UpdateAndDraw()
         }
         
         EndTexturedBeam();
-
+        }
         // Pass 2: Sharp, crackling rotating core
         StartTexturedBeam(this, ZPlane, tazer_lightningBeamSprite->Index, 0.0, 1);
         
@@ -676,6 +749,8 @@ void CEffectManager::DrawSpinFX()
     if (managerState == 1) return;
     float radius = baseRadius;
     int currentNumSegs = 16;
+    if (shouldBeamGlow)
+    {
     // --- PASS 1: Soft Outer Glow ---
     StartTexturedBeam(this, ZPlane, beam_glowSprite->Index, 0.0, 1);
     for (local i = 0; i <= currentNumSegs; i++)
@@ -717,7 +792,7 @@ void CEffectManager::DrawSpinFX()
         }
     }
     EndTexturedBeam();
-
+    }
     // --- PASS 2: Sharp Core ---
     StartTexturedBeam(this, ZPlane, tazer_lightningBeamSprite->Index, 0.0, 1);
     for (local i = 0; i <= currentNumSegs; i++)
@@ -796,6 +871,8 @@ void CEffectManager::DrawRingFX() //double ring
     EndTexturedBeam(); 
 
     // --- PASS 3: Glow Beam ---
+    if (shouldBeamGlow)
+    {
     StartTexturedBeam(this, ZPlane, beam_glowSprite->Index, 0.0, 1);
     for (local i = 0; i <= numSegs; i++)
     {                                          
@@ -815,6 +892,7 @@ void CEffectManager::DrawRingFX() //double ring
         TexturedBeamPoint(px, py, beamGlowThicc, texCoord, glowrgb);
     }
     EndTexturedBeam();
+    }
 }
         
 void CEffectManager::DrawExplosion()
@@ -844,7 +922,7 @@ void CEffectManager::DrawExplosion()
         TexturedBeamPoint(px, py, currentThickness, float(i)/float(numSegs), RGB(fadeR, fadeG, fadeB));
     }
     EndTexturedBeam();   
-    
+    if (!shouldBeamGlow) return;
     StartTexturedBeam(this, ZPlane, beam_glowSprite->Index, 0.0, 1);
     for (local i = 0; i <= numSegs; i++)
     {
@@ -889,8 +967,9 @@ void CEffectManager::DrawEllipse()
         
         TexturedBeamPoint(px, py, currentThickness, float(i)/float(numSegs), RGB(fadeR, fadeG, fadeB));
     }
-    EndTexturedBeam();   
-    
+    EndTexturedBeam();     
+                             
+    if (!shouldBeamGlow) return;
     StartTexturedBeam(this, ZPlane, beam_glowSprite->Index, 0.0, 1);
     for (local i = 0; i <= numSegs; i++)
     {
@@ -1015,7 +1094,8 @@ void CEffectManager::DrawReachPoint()
         }*/
     }
     EndTexturedBeam();
-    
+           
+    if (!shouldBeamGlow) return;
     //Glow
     StartTexturedBeam(this, ZPlane, beam_glowSprite->Index, 0.0, 1);
     for (local i = 0; i <= drawSegs; i++)
@@ -1064,9 +1144,68 @@ void CEffectManager::DrawReachPoint()
     
     EndTexturedBeam();
     
-    if (reachProgress >= 1.0)
+    if (reachProgress >= 1.0 && !rayPersists)
         hasReachTarget = false;
-} 
+}  
+
+float cumDist[600];
+float tempX[600];
+float tempY[600];
+
+void CEffectManager::NormalizeTrail()
+{
+    if (trailAmount < 2) return;
+
+    // 1. Calculate cumulative distance along the existing trail
+    cumDist[0] = 0.0;
+    tempX[0]   = trailPastX[0];
+    tempY[0]   = trailPastY[0];
+
+    for (int i = 1; i < trailAmount; i++)
+    {
+        tempX[i] = trailPastX[i];
+        tempY[i] = trailPastY[i];
+
+        float dx = tempX[i] - tempX[i - 1];
+        float dy = tempY[i] - tempY[i - 1];
+        cumDist[i] = cumDist[i - 1] + sqrt(dx * dx + dy * dy);
+    }
+
+    float totalLength = cumDist[trailAmount - 1];
+    
+    // Avoid division by zero if the object barely moved
+    if (totalLength < 0.001) return; 
+
+    // 2. Resample points at uniform distance steps
+    int currSeg = 0;
+    
+    for (int k = 0; k < trailAmount; k++)
+    {
+        // Target distance along the path for point k
+        float targetDist = (float(k) / float(trailAmount - 1)) * totalLength;
+
+        // Advance segment index until targetDist lies between currSeg and currSeg + 1
+        while (currSeg < trailAmount - 2 && cumDist[currSeg + 1] < targetDist)
+        {
+            currSeg++;
+        }
+
+        float segStart = cumDist[currSeg];
+        float segEnd   = cumDist[currSeg + 1];
+        float segLen   = segEnd - segStart;
+
+        // Linear interpolation factor (0.0 to 1.0) inside this segment
+        float u = 0.0;
+        if (segLen > 0.0001)
+        {
+            u = (targetDist - segStart) / segLen;
+        }
+
+        // Write evenly spaced point back to the main array
+        trailPastX[k] = tempX[currSeg] + u * (tempX[currSeg + 1] - tempX[currSeg]);
+        trailPastY[k] = tempY[currSeg] + u * (tempY[currSeg + 1] - tempY[currSeg]);
+    }
+}
 
 void CEffectManager::FillTrail()
 {     
@@ -1111,7 +1250,7 @@ void CEffectManager::DetractTrail()
 void CEffectManager::InsertInTrail(float x, float y)
 {     
     if (managerState == 1 && effectType != 5) return;
-    if (trailAmount > 1200) trailAmount = 0; 
+    if (trailAmount > 550) trailAmount = 0; 
       
     trailPastX[trailAmount] = x;  
     trailPastY[trailAmount] = y;
@@ -1158,9 +1297,14 @@ float absFltn(float f)
 
 void CEffectManager::DrawTrail()
 {      //  trailProgressive = true;     
+    if (trailAmount < 2) return; 
+    
+    
     StartTexturedBeam(this, ZPlane, tazer_lightningBeamSprite->Index, 0.0, 1);
     for (local i = 0; i < trailAmount; i++)
-    {
+    {              
+    local trailX = trailPastX[i] + trailOffX;   
+    local trailY = trailPastY[i] + trailOffY;
         float t = float(i + 1) / float(trailAmount + 1);
         float f;
 
@@ -1187,16 +1331,21 @@ void CEffectManager::DrawTrail()
         int dg = int(float(g) * f);
         int db = int(float(b) * f);
 
-        TexturedBeamPoint(trailPastX[i], trailPastY[i], f * rayThickness, t, RGB(dr, dg, db));
+        TexturedBeamPoint(trailX, trailY, f * rayThickness, t, RGB(dr, dg, db));
     }
 
     EndTexturedBeam();
-
+                                                                             
+    if (!shouldBeamGlow) return;
     // --- Glow pass — same math, different sprite/thickness scale ---
     StartTexturedBeam(this, ZPlane, beam_glowSprite->Index, 0.0, 1);
 
     for (local i = 0; i < trailAmount; i++)
     {
+       
+    local trailX = trailPastX[i] + trailOffX;   
+    local trailY = trailPastY[i] + trailOffY;
+    
         float t = float(i + 1) / float(trailAmount + 1);
         float f;
         
@@ -1224,7 +1373,7 @@ void CEffectManager::DrawTrail()
         int dg = int(float(g) * f);
         int db = int(float(b) * f);
 
-        TexturedBeamPoint(trailPastX[i], trailPastY[i], f * rayGlowThick, t, RGB(dr, dg, db));
+        TexturedBeamPoint(trailX, trailY, f * rayGlowThick, t, RGB(dr, dg, db));
     }
 
     EndTexturedBeam();

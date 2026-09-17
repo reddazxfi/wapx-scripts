@@ -1,5 +1,3 @@
-require utils;
-
 //Also AI Slop
                                                                                                        //fullCircle uses the full radian, maxTilt limits it (you manually turn the sprite with SIndex + 290524523)
 float CalculateRotationFixed(float currentX, float currentY, float lookX, float lookY, float currentRot, float turnSpeed, bool fullCircle, float maxTilt)

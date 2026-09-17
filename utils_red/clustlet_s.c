@@ -1,31 +1,5 @@
-require utils;
-CWeapon clustlets;
-                                                                     
-
-void clustlets_s::FirstFrame()
-{
-    zero(&clustlets);
-
-    clustlets.NameA          = 16;
-    clustlets.NameB          = 16;
-    clustlets.Row             = 12;
-    clustlets.Remember        = true;
-    clustlets.UseInCavern     = false;
-    clustlets.NShoots         = 1;
-    clustlets.EndsTurn        = true;
-    clustlets.RetreatTime     = 3000;
-    clustlets.IsWeaponCrate   = true;
-    clustlets.Probablity      = 0;
-    clustlets.Count           = 1;
-    clustlets.GlobalIndex     = 46;
-    clustlets.ActivationType  = AT_Crosshair;
-    clustlets.Graphic         = 6;
-    clustlets.WeaponType      = WT_Launcher;
-
-    ResetClustletLaunch();
-}
-
 // a previous spawn's edits can never leak into the next one.
+
 void ResetClustletLaunch()
 {
     clustlets.launch.spriteSize   = 2;

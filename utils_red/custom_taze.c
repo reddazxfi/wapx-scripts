@@ -1,5 +1,4 @@
 //It's quite cool man
-require weapon_tazer, pxeffects;
 
 int   globalEleStunF;
 float globalElePushX;
@@ -149,9 +148,11 @@ void CWorm::UnTazeArtificial()
 
 override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData* MData)
 {
+        local health = 0;
         // Main Taze Logic.
  	if (Type == M_FRAME && ArtificialTaze)
- 	{
+ 	{                                     
+                health = GS->Info.GetWormHealth(WormTeam, WormNumber);  // Store current Health before Super;
 		// Makes the worm invisible
 		if (ObjState!=WS_DEAD && ObjState!=WS_DEATH && ObjState!=WS_SINKING && GS->Info.GetWormHealth(WormTeam, WormNumber) != 0)
                 {
@@ -163,12 +164,12 @@ override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData*
 		if(TazedAnimCycle >= 1.0) TazedAnimCycle -= 1.0;
 		
 		if (TazeFrames < 1)
-		{
+		{       //Send worm Flying and apply damage.
 			UnTazeArtificial();
 			hitFrame = 0;       // Avoid infinite Saw hits
 		}
 		else
-		{
+		{       // Tazed worm stays in place
 			TazeFrames--;
 			SpX = 0.0;
 			SpY = 0.0;
@@ -189,7 +190,6 @@ override void CWorm::Message(CObject* sender,EMType Type,int MSize,CMessageData*
 			}
 		}
         }  
-        local health = GS->Info.GetWormHealth(WormTeam, WormNumber);
         
  	super; // TazeRet needs current Speed values.
  	//////////////////////////// Gun / Melee Hits ////////////////////////////
@@ -310,7 +310,11 @@ CEffectManager *do_cus_exp_electric(CGObject * sender, int flags, float x, float
         local radius = float((dmg + 2) / 2);
         local zapEffEx = createElectricExplosion(x, y, radius);    //effect
         
-        do_explosion_particles( x, y, tier, false, tier > 1, false, false, true, false, 100, 120, 190);     
+        bool thingy = false;
+        
+        if (tier > 1) thingy = true;
+        
+        do_explosion_particles( x, y, tier, false, thingy, false, false, true, false, 100, 120, 190);     
         
         return zapEffEx; 
 }
